@@ -1,0 +1,11 @@
+
+def show_dashboard(self):
+    """Show the main dashboard"""
+    self.page.views.clear()
+    dashboard_view = DashboardView(
+        self.page, 
+        self.on_logout,
+        self.show_admin
+    )
+    self.page.views.append(dashboard_view.build())
+    self.page.update()

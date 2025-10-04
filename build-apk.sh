@@ -1,0 +1,33 @@
+#!/bin/bash
+# File: /home/adminotaur/Documents/git/flet/decyphertek-ai/mobile-app/custom/build-apk.sh
+
+# Set Android SDK path to match your installation
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin"
+export PATH="$PATH:$ANDROID_HOME/platform-tools"
+export JAVA_HOME="/opt/android-studio-for-platform/jbr"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+echo "Building Android APK for DecypherTek AI..."
+
+# Ensure we are in the script's directory
+cd "$(dirname "$0")"
+
+
+
+# Verify Android SDK exists
+if [ ! -d "$ANDROID_HOME" ]; then
+    echo "ERROR: Android SDK not found at $ANDROID_HOME"
+    echo "Please ensure Android SDK is installed and ANDROID_HOME is set correctly"
+    exit 1
+fi
+
+echo "Using Android SDK: $ANDROID_HOME"
+echo "Using Java: $JAVA_HOME"
+
+# Update Flet to latest version and build
+poetry run pip install --upgrade flet
+poetry run flet build apk mobile
+
+echo "Build process finished. You can find the APK in the build/apk/ directory."

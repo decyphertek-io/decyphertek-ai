@@ -1,0 +1,140 @@
+{
+  "_comment": "MCP Server Registry - AI-readable configuration",
+  "_version": "1.0.0",
+  "_last_updated": "2025-10-03",
+  
+  "servers": {
+    "web-search": {
+      "id": "web-search",
+      "name": "Web Search & Scraper",
+      "enabled": false,
+      "auto_start": false,
+      "status": "stopped",
+      "description": "DuckDuckGo web search and URL content scraping",
+      "python_script": "servers/web-search/web.py",
+      "host": "localhost",
+      "port": null,
+      "transport": "stdio",
+      "capabilities": ["search", "scrape"],
+      "tools": [
+        {
+          "name": "search",
+          "description": "Search the web using DuckDuckGo",
+          "required_params": ["query"],
+          "optional_params": ["num_results"]
+        },
+        {
+          "name": "scrape_url",
+          "description": "Extract text content from a URL",
+          "required_params": ["url"],
+          "optional_params": []
+        }
+      ],
+      "requirements": ["duckduckgo-search>=4.0.0", "requests>=2.31.0", "beautifulsoup4>=4.12.0"],
+      "platforms": ["linux", "android", "macos", "windows"]
+    },
+    
+    "nextcloud": {
+      "id": "nextcloud",
+      "name": "Nextcloud Storage",
+      "enabled": false,
+      "auto_start": false,
+      "status": "stopped",
+      "description": "Access and manage Nextcloud files",
+      "python_script": "servers/nextcloud/nextcloud.py",
+      "host": "localhost",
+      "port": null,
+      "transport": "stdio",
+      "capabilities": ["list_files", "read_file", "write_file", "upload", "download"],
+      "tools": [],
+      "requirements": ["requests>=2.31.0"],
+      "platforms": ["linux", "android", "macos", "windows"],
+      "config_required": {
+        "nextcloud_url": "Nextcloud server URL",
+        "username": "Nextcloud username",
+        "password": "Nextcloud app password"
+      }
+    },
+    
+    "google-drive": {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "enabled": false,
+      "auto_start": false,
+      "status": "stopped",
+      "description": "Access Google Drive files",
+      "python_script": "servers/google-drive/google.py",
+      "host": "localhost",
+      "port": null,
+      "transport": "stdio",
+      "capabilities": ["list_files", "read_file", "search"],
+      "tools": [],
+      "requirements": ["google-auth>=2.0.0", "google-api-python-client>=2.0.0"],
+      "platforms": ["linux", "android", "macos", "windows"],
+      "config_required": {
+        "oauth_token": "Google OAuth token"
+      }
+    },
+    
+    "whatsapp": {
+      "id": "whatsapp",
+      "name": "WhatsApp Integration",
+      "enabled": false,
+      "auto_start": false,
+      "status": "stopped",
+      "description": "Send and receive WhatsApp messages",
+      "python_script": "servers/whatsapp/whatsapp.py",
+      "host": "localhost",
+      "port": null,
+      "transport": "stdio",
+      "capabilities": ["send_message", "read_messages"],
+      "tools": [],
+      "requirements": ["selenium>=4.0.0"],
+      "platforms": ["linux", "android", "macos", "windows"],
+      "config_required": {
+        "phone_number": "WhatsApp phone number"
+      }
+    },
+    
+    "google-voice": {
+      "id": "google-voice",
+      "name": "Google Voice",
+      "enabled": false,
+      "auto_start": false,
+      "status": "stopped",
+      "description": "Send SMS via Google Voice",
+      "python_script": "servers/google-voice/voice.py",
+      "host": "localhost",
+      "port": null,
+      "transport": "stdio",
+      "capabilities": ["send_sms", "read_sms"],
+      "tools": [],
+      "requirements": ["google-auth>=2.0.0"],
+      "platforms": ["linux", "android", "macos", "windows"],
+      "config_required": {
+        "oauth_token": "Google OAuth token"
+      }
+    }
+  },
+  
+  "ai_instructions": {
+    "how_to_enable": "To enable a server, set 'enabled': true in this JSON file",
+    "how_to_use": "When enabled, the AI can invoke tools from that server",
+    "auto_start": "If auto_start is true, the server starts when app launches",
+    "status": "Current status: 'running', 'stopped', or 'error'",
+    "transport": "Communication method: 'stdio' (standard input/output) or 'http'",
+    "example_usage": {
+      "search_web": {
+        "server": "web-search",
+        "tool": "search",
+        "params": {"query": "Python tutorials", "num_results": 5}
+      },
+      "scrape_page": {
+        "server": "web-search",
+        "tool": "scrape_url",
+        "params": {"url": "https://example.com"}
+      }
+    }
+  }
+}
+

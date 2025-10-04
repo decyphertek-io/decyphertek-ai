@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+**/android/build/
+**/android/app/build/
+**/android/.gradle/
+
+# ChromaDB
+*.duckdb
+*.duckdb-wal
+*.parquet
+
+# App data
+.decyphertek-ai/
+.decyphertek-ai-librechat/
+credentials.enc
+master.key
+config.json
+librechat.db
+
+# Logs
+*.log
+
+# Poetry
+poetry.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local testing
+test_storage/
+test_data/

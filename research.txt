@@ -1,0 +1,178 @@
+https://www.librechat.ai/docs/features/mcp
+https://github.com/modelcontextprotocol
+https://modelcontextprotocol.io/docs/develop/build-server
+https://github.com/modelcontextprotocol/python-sdk
+# Works with Windsurf
+https://windsurf.run/mcp
+
+* Flet + Pygpt + Auth ( Linux APP ) 
+* MCP Store integration A way for the app to pull from an mcp store that is an open github repo.( Great Idea ) 
+* https://pygpt.net/
+* https://pyinstaller.org/en/stable/
+* Can use poetry to help do initial build.
+* Vscode Plugin MCP Store via pyinstaller.
+* Mobile: Pyinstaller doesnt work? Briefcase not a solution, x10 apks not practical. ( Maybe Chaquopy ? ) 
+
+* Librechat Version as well. 
+
+* Android APP Idea + Openrouter + Smithery chat app. Supports AI + MCP. Run from the phone. 
+
+# I dont like that it requires smithery as a middleman. Maybe just make my own or use docker , not sure yet. 
+
+* Librechat and smithery.ai
+* Enable RAG too.
+
+* https://smithery.ai/
+* https://smithery.ai/server/elasticsearch-mcp-server
+* https://github.com/cr7258/elasticsearch-mcp-server
+
+pip install "mcp[cli]"
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+# Construct server URL with authentication
+from urllib.parse import urlencode
+base_url = "https://server.smithery.ai/elasticsearch-mcp-server/mcp"
+params = {"api_key": "••••••••••••••••", "profile": "••••••••"}
+url = f"{base_url}?{urlencode(params)}"
+
+async def main():
+    # Connect to the server using HTTP client
+    async with streamablehttp_client(url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            # Initialize the connection
+            await session.initialize()
+            
+            # List available tools
+            tools_result = await session.list_tools()
+            print(f"Available tools: {', '.join([t.name for t in tools_result.tools])}")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+
+===================
+
+https://www.youtube.com/watch?v=GuTcle5edjk
+https://hub.docker.com/search?q=MCP+server
+https://hub.docker.com/r/mcp/azure
+
+* Can Make a custom one
+* Can use existing one. Azure seems interesting. Wonder if I can use it for cloud compliance?
+*https://hub.docker.com/mcp/server/duckduckgo/overview
+
+* Can also build MCP server using python.
+* Also make an agent with https://www.langchain.com/
+
+
+
+pip install flet openrouter opensearch-py langchain
+
+import flet as ft
+from langchain import OpenRouter
+from opensearchpy import OpenSearch
+
+# Initialize OpenRouter model
+router = OpenRouter(api_key='YOUR_OPENROUTER_API_KEY')
+
+# Initialize OpenSearch client
+opensearch_client = OpenSearch(
+    hosts=[{'host': 'localhost', 'port': 9200}],
+    http_auth=('user', 'password'),  # Use your OpenSearch credentials
+)
+
+def main(page: ft.Page):
+    page.title = "MCP AI Gateway with LangChain"
+    
+    input_box = ft.TextField(label="Ask a question", multiline=False)
+    output_area = ft.TextArea(label="Response", read_only=True, height=200)
+    
+    def on_submit(e):
+        user_input = input_box.value
+        
+        # Use LangChain with OpenRouter to process the input and generate a response
+        response = router.generate(user_input)
+        
+        # Optionally, interact with OpenSearch
+        search_response = opensearch_client.search(
+            index="your_index",
+            body={
+                "query": {
+                    "match": {
+                        "content": user_input
+                    }
+                }
+            }
+        )
+        
+        # Display the response and search results
+        output_area.value = f"Response: {response}\n\nSearch Results: {search_response['hits']['hits']}"
+        page.update()
+
+    submit_button = ft.ElevatedButton(text="Submit", on_click=on_submit)
+    
+    page.add(input_box, submit_button, output_area)
+
+ft.app(target=main)
+
+=============
+
+# Librechat not listed
+* Vscode and cloud compliance
+* https://smithery.ai/server/@tharuneshwar-s/auditron-soc-mcp-server
+* Maybe create an MCP server for cloud custodian. 
+* CIS Compliance .
+* https://github.com/Eazy-Ops/cloud-custodian-mcp
+
+
+===========
+
+* Librechat and terraform.
+* https://server.smithery.ai/@hashicorp/terraform-mcp-server/mcp
+* AWS - https://hub.docker.com/r/mcp/aws-terraform
+* AWS has many of them. Need to test with Librechat. 
+
+
+==========
+
+# Not sure flutter is capable. This does complicate security and deployment if just a mobile app. Maybe need some auth login and stripe or privacy focused version?
+
+* Flet app Librechat type / opensearch / MCP Server / Lanchain agent. 
+
+* Not sure. Maybe more secure to just use librechat and opensearch .
+
+
+=======
+
+Librechat + Nextcloud ( FreedomBox ) + Qdrant Vector DB ( https://qdrant.tech/ ) + MCP Server . 
+
+
+======
+
+* RAG Chat - LibreChat + Nextcloud + Qdrant    + MCP server (  FastAPI + Web search / Web Crawler + Celery/APScheduler + Secure way to store credentials + Caldev for scheduling and basics. )
+
+* FastAPI (MCP) + APScheduler scheduling) + CALdev (job store + metadata) + Qdrant 
+
+
+
+- Keep LibreChat as the UI; run an MCP backend to handle ingestion, embedding, ACLs, queries, and LLM calls.
+- Bulk ingest flow: upload/download → extract text → chunk → embed → upsert to Qdrant (store chunk metadata and owner).
+- Also ingest web results (crawl/search API) and API data by extracting text/JSON, chunking, embedding, and upserting.
+- Use workers + scheduler (Celery/APScheduler) for bulk/recurring jobs; store job state in Postgres or sqlite3/TL;DR:
+
+- Keep LibreChat as the UI; run an MCP backend to handle ingestion, embedding, ACLs, queries, and LLM calls.
+- Bulk ingest flow: upload/download → extract text → chunk → embed → upsert to Qdrant (store chunk metadata and owner).
+- Also ingest web results (crawl/search API) and API data by extracting text/JSON, chunking, embedding, and upserting.
+- Use workers + scheduler (Celery/APScheduler) for bulk/recurring jobs; store job state in Postgres/SQLite.
+- Deduplicate with chunk hashes; filter queries by owner/permissions in MCP.
+- LibreChat triggers chat/query to MCP; MCP queries Qdrant, builds prompt, calls LLM, returns answers with citations.
+
+Want a ready FastAPI ingest script or MCP skeleton next?.
+- Deduplicate with chunk hashes; filter queries by owner/permissions in MCP.
+- LibreChat triggers chat/query to MCP; MCP queries Qdrant, builds prompt, calls LLM, returns answers with citations.
+
+Want a ready FastAPI ingest script or MCP skeleton next?
+
+
+

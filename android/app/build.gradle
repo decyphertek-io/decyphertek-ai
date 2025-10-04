@@ -1,0 +1,86 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'com.chaquo.python'
+}
+
+android {
+    namespace 'io.decyphertek.ai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "io.decyphertek.ai"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Chaquopy Python configuration
+        python {
+            buildPython "/usr/bin/python3.10"
+            
+            pip {
+                // Core dependencies
+                install "flet==0.24.1"
+                install "chromadb==0.4.24"
+                install "sentence-transformers==2.3.1"
+                install "cryptography==42.0.8"
+                install "pydantic==2.7.4"
+                install "httpx==0.27.0"
+                install "GitPython==3.1.43"
+                install "pyyaml==6.0.1"
+                install "aiofiles==23.2.1"
+                
+                // NumPy with Android compatibility
+                install "numpy<2.0"
+                
+                // Additional dependencies
+                install "python-dotenv==1.0.1"
+            }
+        }
+        
+        ndk {
+            // Support for 64-bit ARM and x86_64
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    
+    packagingOptions {
+        pickFirst 'lib/*/libc++_shared.so'
+        pickFirst 'lib/*/libffi.so'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+

@@ -1,0 +1,40 @@
+[project]
+name = "LangTek"
+version = "0.1.0"
+description = "Spanish language learning app with RSS feed reader and translation tools"
+readme = "README.md"
+requires-python = "<3.14,>=3.9"
+authors = [
+    { name = "Flet developer", email = "you@example.com" }
+]
+dependencies = [
+  "flet[all]>=0.28.3,<0.29.0",
+  "feedparser",
+  "aiohttp",
+  "beautifulsoup4",
+  "pyttsx3",
+  "requests",
+  "gtts",
+  "pygame"
+]
+
+[tool.flet]
+# org name in reverse domain name notation, e.g. "com.mycompany".
+# Combined with project.name to build bundle ID for iOS and Android apps
+org = "com.decyphertek"
+
+# project display name that is used as an app title on Android and iOS home screens,
+# shown in window titles and about app dialogs on desktop.
+product = "langtek"
+
+# company name to display in about app dialogs
+company = "Flet"
+
+# copyright text to display in about app dialogs
+copyright = "Copyright (C) 2025 by Flet"
+
+[tool.flet.app]
+path = "src"
+
+[tool.poetry]
+package-mode = false
