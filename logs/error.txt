@@ -138,3 +138,40 @@ Installing flet-cli 0.28.3 package...OK
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 Build process finished. You can find the APK in thec build/apk/ directory.
 adminotaur@hal9000:~/Documents/git/decyphertek-ai$ 
+
+===============
+
+adminotaur@hal9000:~/Documents/git/decyphertek-ai$ bash build-linux.sh 
+╔════════════════════════════════════════╗
+║   DecypherTek AI - Linux Build         ║
+║   .deb and Flatpak Packages            ║
+╚════════════════════════════════════════╝
+
+[1/4] Cleaning previous builds...
+✓ Cleaned previous builds
+
+[2/4] Building .deb package...
+[17:09:05] Created Flutter bootstrap project from gh:flet-dev/flet-build-template with ref 0.24.1 ✅                          
+           Customized app icons and splash images ✅                                                                          
+[17:09:15] Generated app icons ✅                                                                                             
+[17:09:37] Running package command                                                                                            
+           Creating asset directory: /tmp/flet_flutter_build_Fvt4xFxKkr/app                                                   
+           Copying Python app from /home/adminotaur/Documents/git/decyphertek-ai/src to /tmp/serious_python_tempTTLQZP        
+           Installing dependencies  with pip command to /tmp/serious_python_tempTTLQZP/__pypackages__                         
+           Extracting Python distributive from /tmp/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz to   
+           /tmp/hostpython3.11_UATIRZ                                                                                         
+           Compiling Python sources at /tmp/serious_python_tempTTLQZP                                                         
+                                                                                                                              
+           Error building Flet app - see the log of failed command above.                                                     
+[17:09:42] Doctor summary (to see all details, run flutter doctor -v):                                                        
+           [✓] Flutter (Channel stable, 3.35.5, on Debian GNU/Linux 13 (trixie) 6.12.48+deb13-amd64, locale en_US.UTF-8)      
+           [✓] Android toolchain - develop for Android devices (Android SDK version 36.1.0-rc1)                               
+           [✓] Chrome - develop for the web                                                                                   
+           [✓] Linux toolchain - develop for Linux desktop                                                                    
+           [!] Android Studio (not installed)                                                                                 
+           [✓] Connected device (2 available)                                                                                 
+           [✓] Network resources                                                                                              
+                                                                                                                              
+           ! Doctor found issues in 1 category.                                                                               
+                                                                                                                              
+adminotaur@hal9000:~/Documents/git/decyphertek-ai$ 
