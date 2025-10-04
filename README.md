@@ -1,6 +1,7 @@
 # DecypherTek AI
 
-A modern AI assistant with chat, document management, and app integration capabilities. Note: This is in dev and the mobile feature doesnt work as of now. Runiing the launch.sh from linux does work. Many features are in dev as well and do not function correctly. 
+A modern AI assistant with chat, document management, and app integration capabilities. 
+**Note**: This is in dev and the mobile feature doesnt work as of now. Running the launch.sh from linux does work. Many features are in dev as well and do not function correctly. 
 
 ## Features
 
