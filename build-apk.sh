@@ -46,6 +46,9 @@ rm -f credential_free_mobile/*.json
 rm -f credential_free_mobile/*.env
 rm -f credential_free_mobile/*.key
 
+# Ensure no credential management code is included
+echo "Building credential-free mobile app..."
+
 # Build APK with credential-free app
 poetry run flet build apk credential_free_mobile
 
