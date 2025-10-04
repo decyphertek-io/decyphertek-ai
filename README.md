@@ -52,9 +52,12 @@ A modern AI assistant with chat, document management, and app integration capabi
 - Poetry (recommended) or pip
 - OpenRouter API key (for full AI features)
 
-## Support
+## Getting Help
 
-For issues or questions, please check the logs in the `logs/` directory or create an issue in the repository.
+- **App won't start?** Make sure you have Python 3.10+ and all dependencies installed
+- **Login issues?** Try deleting `~/.decyphertek-ai/` and setting up again
+- **API errors?** Check your OpenRouter API key in Settings
+- **Still having trouble?** The app is in active development - some features may not work perfectly yet
 
 ---
 
