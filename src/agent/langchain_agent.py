@@ -782,12 +782,29 @@ class DecypherTekAgent:
         is_video_search = any(keyword in message_lower for keyword in video_keywords)
         
         # Default to web search
-        # Extract search query
+        # Extract search query - look for the actual content, not just prefixes
         search_query = user_message
-        for prefix in ["search for", "find", "look up", "search", "show me", "get me", "can you find"]:
-            if prefix in message_lower:
-                search_query = message_lower.split(prefix, 1)[1].strip()
-                break
+        
+        # Remove common question words and phrases
+        question_removals = [
+            "what is", "what's", "what are", "what were", "what will",
+            "how is", "how's", "how are", "how were", "how will",
+            "where is", "where's", "where are", "where were", "where will",
+            "when is", "when's", "when are", "when were", "when will",
+            "why is", "why's", "why are", "why were", "why will",
+            "can you", "could you", "would you", "will you",
+            "please", "via a web search", "via web search", "using web search",
+            "?", "!", ".", ","
+        ]
+        
+        # Clean up the query
+        search_query = message_lower
+        for removal in question_removals:
+            search_query = search_query.replace(removal, " ").strip()
+        
+        # If we still have a very short or empty query, use the original message
+        if len(search_query.strip()) < 3:
+            search_query = user_message
         
         # Execute appropriate search
         try:

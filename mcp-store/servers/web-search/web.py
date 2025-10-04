@@ -30,6 +30,23 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
     print("[Web Search] MCP server not available - running in standalone mode")
+    
+    # Create dummy classes for standalone mode
+    class CallToolResult:
+        def __init__(self, content=None, isError=False):
+            self.content = content or []
+            self.isError = isError
+    
+    class TextContent:
+        def __init__(self, type="text", text=""):
+            self.type = type
+            self.text = text
+    
+    class ImageContent:
+        def __init__(self, type="image", data=None, mimeType="image/jpeg"):
+            self.type = type
+            self.data = data
+            self.mimeType = mimeType
 
 # Initialize search engines with fallbacks
 try:
@@ -791,29 +808,40 @@ async def handle_image_search(arguments: dict) -> CallToolResult:
 
 
 # Module-level functions for direct import (Chaquopy compatibility)
-if MCP_AVAILABLE:
-    async def search(query: str, num_results: int = 5) -> CallToolResult:
-        """
-        Direct search function for Chaquopy
-        Can be called without spawning server process
-        """
+async def search(query: str, num_results: int = 5):
+    """
+    Direct search function for Chaquopy
+    Can be called without spawning server process
+    """
+    if MCP_AVAILABLE:
         return await call_tool("search", {"query": query, "num_results": num_results})
+    else:
+        # Standalone mode - call search_with_fallbacks directly
+        return search_with_fallbacks(query, num_results)
 
 
-    async def search_videos(query: str, num_results: int = 3) -> CallToolResult:
-        """
-        Direct video search function for Chaquopy
-        Can be called without spawning server process
-        """
+async def search_videos(query: str, num_results: int = 3):
+    """
+    Direct video search function for Chaquopy
+    Can be called without spawning server process
+    """
+    if MCP_AVAILABLE:
         return await call_tool("search_videos", {"query": query, "num_results": num_results})
+    else:
+        # Standalone mode - call search_with_fallbacks directly
+        return search_with_fallbacks(query, num_results)
 
 
-    async def search_images(query: str, num_results: int = 5) -> CallToolResult:
-        """
-        Direct image search function for Chaquopy
-        Can be called without spawning server process
-        """
+async def search_images(query: str, num_results: int = 5):
+    """
+    Direct image search function for Chaquopy
+    Can be called without spawning server process
+    """
+    if MCP_AVAILABLE:
         return await call_tool("search_images", {"query": query, "num_results": num_results})
+    else:
+        # Standalone mode - call search_with_fallbacks directly
+        return search_with_fallbacks(query, num_results)
 
 
     async def main():

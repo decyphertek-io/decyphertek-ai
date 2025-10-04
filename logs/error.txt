@@ -136,5 +136,5 @@ Installing flet-cli 0.28.3 package...OK
 ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Error building Flet app - see the log of failed command above.                                                             │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-Build process finished. You can find the APK in the build/apk/ directory.
+Build process finished. You can find the APK in thec build/apk/ directory.
 adminotaur@hal9000:~/Documents/git/decyphertek-ai$ 
