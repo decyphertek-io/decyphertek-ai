@@ -1,0 +1,40 @@
+t/decyphertek-ai/mobile-app/custom/
+           mobile/build/flutter/.dart_tool/package_config.json does not exist.  
+           Did you run this command from the same directory as your pubspec.yaml
+           file?                                                                
+           Target gen_dart_plugin_registrant failed: Error:                     
+                                                                                
+                                                                                
+           FAILURE: Build failed with an exception.                             
+                                                                                
+           * What went wrong:                                                   
+           Execution failed for task ':app:compileFlutterBuildRelease'.         
+           > Process 'command '/home/adminotaur/flutter/3.29.2/bin/flutter''    
+           finished with non-zero exit value 1                                  
+                                                                                
+           * Try:                                                               
+           > Run with --stacktrace option to get the stack trace.               
+           > Run with --info or --debug option to get more log output.          
+           > Run with --scan to get full insights.                              
+           > Get more help at https://help.gradle.org.                          
+                                                                                
+           BUILD FAILED in 36m 16s                                              
+           Gradle task assembleRelease failed with exit code 1                  
+                                                                                
+[15:07:55] Doctor summary (to see all details, run flutter doctor -v):          
+           [✓] Flutter (Channel stable, 3.29.2, on Debian GNU/Linux 13 (trixie) 
+           6.12.48+deb13-amd64, locale en_US.UTF-8)                             
+           [✓] Android toolchain - develop for Android devices (Android SDK     
+           version 36.1.0-rc1)                                                  
+           [✓] Chrome - develop for the web                                     
+           [✓] Linux toolchain - develop for Linux desktop                      
+           [!] Android Studio (not installed)                                   
+           [✓] Connected device (2 available)                                   
+           [✓] Network resources                                                
+                                                                                
+           ! Doctor found issues in 1 category.                                 
+                                                                                
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Error building Flet app - see the log of failed command above.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Build process finished. You can find the APK in the build/apk/ directory.
