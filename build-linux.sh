@@ -36,8 +36,13 @@ rm -rf build/flatpak
 echo -e "${GREEN}✓ Cleaned previous builds${NC}"
 echo ""
 
+# Copy Linux-specific requirements
+echo -e "${YELLOW}[2/4] Preparing Linux build...${NC}"
+cp requirements-linux.txt src/requirements.txt
+echo -e "${GREEN}✓ Using Linux-compatible requirements${NC}"
+
 # Build .deb package
-echo -e "${YELLOW}[2/4] Building .deb package...${NC}"
+echo -e "${YELLOW}[3/4] Building .deb package...${NC}"
 poetry run flet build linux src \
     --project "decyphertek-ai" \
     --description "DecypherTek AI - Modern AI Assistant" \
@@ -58,8 +63,13 @@ else
 fi
 echo ""
 
+# Restore original requirements
+echo -e "${YELLOW}[4/5] Restoring original requirements...${NC}"
+git checkout src/requirements.txt 2>/dev/null || echo "Original requirements.txt not in git"
+echo -e "${GREEN}✓ Restored original requirements${NC}"
+
 # Build Flatpak package
-echo -e "${YELLOW}[3/4] Building Flatpak package...${NC}"
+echo -e "${YELLOW}[5/5] Building Flatpak package...${NC}"
 poetry run flet build linux src \
     --project "decyphertek-ai" \
     --description "DecypherTek AI - Modern AI Assistant" \
@@ -69,8 +79,7 @@ poetry run flet build linux src \
     --copyright "© 2025 DecypherTek" \
     --build-version "1.0.0" \
     --build-number "1" \
-    --exclude __pycache__ .venv .git logs \
-    --template flatpak
+    --exclude __pycache__ .venv .git logs
 
 if [ -d "build/flatpak" ]; then
     echo -e "${GREEN}✓ Flatpak package built successfully${NC}"
