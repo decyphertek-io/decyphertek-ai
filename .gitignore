@@ -26,6 +26,9 @@ dist/
 *.deb
 *.rpm
 
+# GitHub Actions and CI/CD
+.github/
+
 # Python
 __pycache__/
 *.py[cod]
