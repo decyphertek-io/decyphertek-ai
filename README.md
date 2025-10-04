@@ -1,6 +1,6 @@
 # DecypherTek AI - Custom Mobile App
 
-**Complete mobile AI assistant** with **3 AI providers** (OpenRouter, DuckDuckGo FREE, Ollama), unified agent system, modular MCP architecture, and conversational RAG integration.
+**Complete mobile AI assistant** with **3 AI providers** (OpenRouter, Duck.ai, Ollama), unified agent system, modular MCP architecture, and conversational RAG integration.
 
 ## 🚀 Quick Launch
 
