@@ -3,6 +3,7 @@ Mobile-compatible version of DecypherTek AI
 Excludes RAG, MCP, and other non-mobile-compatible features
 """
 
+
 import flet as ft
 from typing import Optional
 import json
