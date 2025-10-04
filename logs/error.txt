@@ -1,40 +1,140 @@
-t/decyphertek-ai/mobile-app/custom/
-           mobile/build/flutter/.dart_tool/package_config.json does not exist.  
-           Did you run this command from the same directory as your pubspec.yaml
-           file?                                                                
-           Target gen_dart_plugin_registrant failed: Error:                     
-                                                                                
-                                                                                
-           FAILURE: Build failed with an exception.                             
-                                                                                
-           * What went wrong:                                                   
-           Execution failed for task ':app:compileFlutterBuildRelease'.         
-           > Process 'command '/home/adminotaur/flutter/3.29.2/bin/flutter''    
-           finished with non-zero exit value 1                                  
-                                                                                
-           * Try:                                                               
-           > Run with --stacktrace option to get the stack trace.               
-           > Run with --info or --debug option to get more log output.          
-           > Run with --scan to get full insights.                              
-           > Get more help at https://help.gradle.org.                          
-                                                                                
-           BUILD FAILED in 36m 16s                                              
-           Gradle task assembleRelease failed with exit code 1                  
-                                                                                
-[15:07:55] Doctor summary (to see all details, run flutter doctor -v):          
-           [✓] Flutter (Channel stable, 3.29.2, on Debian GNU/Linux 13 (trixie) 
-           6.12.48+deb13-amd64, locale en_US.UTF-8)                             
-           [✓] Android toolchain - develop for Android devices (Android SDK     
-           version 36.1.0-rc1)                                                  
-           [✓] Chrome - develop for the web                                     
-           [✓] Linux toolchain - develop for Linux desktop                      
-           [!] Android Studio (not installed)                                   
-           [✓] Connected device (2 available)                                   
-           [✓] Network resources                                                
-                                                                                
-           ! Doctor found issues in 1 category.                                 
-                                                                                
-╭──────────────────────────────────────────────────────────────────────────────╮
-│ Error building Flet app - see the log of failed command above.               │
-╰──────────────────────────────────────────────────────────────────────────────╯
+Successfully installed flet-0.28.3
+Installing flet-cli 0.28.3 package...OK
+[15:28:09] Flutter 3.29.2 installed ✅                                                                                        
+[15:28:10] JDK installed ✅                                                                                                   
+           Android SDK installed ✅                                                                                           
+[15:28:28] Created Flutter bootstrap project from gh:flet-dev/flet-build-template with ref "0.28.3" ✅                        
+[15:30:37] Packaged Python app ✅                                                                                             
+[15:31:05] Generated app icons ✅                                                                                             
+[15:31:12] Generated splash screens ✅                                                                                        
+[15:31:37] Resolving dependencies...                                                                                          
+           Downloading packages...                                                                                            
+             archive 3.6.1 (4.0.7 available)                                                                                  
+             characters 1.4.0 (1.4.1 available)                                                                               
+             checked_yaml 2.0.3 (2.0.4 available)                                                                             
+             device_info_plus 11.5.0 (12.1.0 available)                                                                       
+             fl_chart 0.69.2 (1.1.1 available)                                                                                
+           ! flet 0.28.3 (overridden)                                                                                         
+             flutter_lints 2.0.3 (6.0.0 available)                                                                            
+             flutter_native_splash 2.4.4 (2.4.6 available)                                                                    
+             image 4.3.0 (4.5.4 available)                                                                                    
+             intl 0.19.0 (0.20.2 available)                                                                                   
+             js 0.6.7 (0.7.2 available)                                                                                       
+             lints 2.1.1 (6.0.0 available)                                                                                    
+             material_color_utilities 0.11.1 (0.13.0 available)                                                               
+             meta 1.16.0 (1.17.0 available)                                                                                   
+             package_info_plus 8.3.1 (9.0.0 available)                                                                        
+             petitparser 6.1.0 (7.0.1 available)                                                                              
+             sensors_plus 4.0.2 (7.0.0 available)                                                                             
+             sensors_plus_platform_interface 1.2.0 (2.0.1 available)                                                          
+           ! serious_python 0.9.3 from git https://github.com/flet-dev/serious-python.git at 8b773f in src/serious_python     
+           (overridden)                                                                                                       
+             shared_preferences_android 2.4.13 (2.4.14 available)                                                             
+             toml 0.15.0 (0.16.0 available)                                                                                   
+             url_launcher_android 6.3.20 (6.3.23 available)                                                                   
+             url_strategy 0.2.0 (discontinued)                                                                                
+             vector_math 2.1.4 (2.2.0 available)                                                                              
+           ! wakelock_plus 1.3.3 (overridden) (1.4.0 available)                                                               
+           ! web 1.1.1 (overridden)                                                                                           
+             web_socket_channel 2.4.5 (3.0.3 available)                                                                       
+           ! webview_flutter_android 4.10.3 (overridden)                                                                      
+             win32 5.13.0 (5.14.0 available)                                                                                  
+           ! window_manager 0.4.3 (overridden) (0.5.1 available)                                                              
+             xml 6.5.0 (6.6.1 available)                                                                                      
+           Got dependencies!                                                                                                  
+           1 package is discontinued.                                                                                         
+           27 packages have newer versions incompatible with dependency constraints.                                          
+           Try `flutter pub outdated` for more information.                                                                   
+                                                                                                                              
+           Running Gradle task 'assembleRelease'...                                                                           
+           Gradle build config:                                                                                               
+             minSdkVersion: 21                                                                                                
+             targetSdkVersion: 35                                                                                             
+             versionCode: 1                                                                                                   
+             versionName: 1.0.0                                                                                               
+           Running Gradle task 'assembleRelease'...                           21.8s                                           
+                                                                                                                              
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/webview_flutter_android.dart:1:1:   
+           Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest       
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_ssl_auth_error.dart:1:1:
+           Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest       
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_webview_controller.dart:
+           1:1: Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest  
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_webview_cookie_manager.d
+           art:1:1: Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The      
+           highest supported language version is 3.7.                                                                         
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_webview_platform.dart:1:
+           1: Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest    
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_webkit.g.dart:1:1:      
+           Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest       
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_proxy.dart:1:1: Error:  
+           The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest supported    
+           language version is 3.7.                                                                                           
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/android_webkit_constants.dart:1:
+           1: Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest    
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/platform_views_service_proxy.dar
+           t:1:1: Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           ../../../../../../.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.3/lib/src/weak_reference_utils.dart:1:1:  
+           Error: The language version 3.9 specified for the package 'webview_flutter_android' is too high. The highest       
+           supported language version is 3.7.                                                                                 
+           // Copyright 2013 The Flutter Authors                                                                              
+           ^                                                                                                                  
+           Target kernel_snapshot_program failed: Exception                                                                   
+                                                                                                                              
+                                                                                                                              
+           FAILURE: Build failed with an exception.                                                                           
+                                                                                                                              
+           * What went wrong:                                                                                                 
+           Execution failed for task ':app:compileFlutterBuildRelease'.                                                       
+           > Process 'command '/home/adminotaur/flutter/3.29.2/bin/flutter'' finished with non-zero exit value 1              
+                                                                                                                              
+           * Try:                                                                                                             
+           > Run with --stacktrace option to get the stack trace.                                                             
+           > Run with --info or --debug option to get more log output.                                                        
+           > Run with --scan to get full insights.                                                                            
+           > Get more help at https://help.gradle.org.                                                                        
+                                                                                                                              
+           BUILD FAILED in 21s                                                                                                
+           Gradle task assembleRelease failed with exit code 1                                                                
+                                                                                                                              
+[15:31:45] Doctor summary (to see all details, run flutter doctor -v):                                                        
+           [✓] Flutter (Channel stable, 3.29.2, on Debian GNU/Linux 13 (trixie) 6.12.48+deb13-amd64, locale en_US.UTF-8)      
+           [✓] Android toolchain - develop for Android devices (Android SDK version 36.1.0-rc1)                               
+           [✓] Chrome - develop for the web                                                                                   
+           [✓] Linux toolchain - develop for Linux desktop                                                                    
+           [!] Android Studio (not installed)                                                                                 
+           [✓] Connected device (2 available)                                                                                 
+           [✓] Network resources                                                                                              
+                                                                                                                              
+           ! Doctor found issues in 1 category.                                                                               
+                                                                                                                              
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Error building Flet app - see the log of failed command above.                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 Build process finished. You can find the APK in the build/apk/ directory.
+adminotaur@hal9000:~/Documents/git/decyphertek-ai$ 
