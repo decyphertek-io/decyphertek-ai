@@ -26,8 +26,27 @@ fi
 echo "Using Android SDK: $ANDROID_HOME"
 echo "Using Java: $JAVA_HOME"
 
-# Update Flet to latest version and build
+# Clean any previous build artifacts
+rm -rf mobile/build
+
+# Force update Flutter to absolute latest version
+echo "Force updating Flutter to latest version..."
+flutter upgrade --force
+
+# Use the latest Flet version (same as desktop)
+echo "Installing latest Flet version..."
 poetry run pip install --upgrade flet
-poetry run flet build apk mobile
+
+# Create a credential-free mobile directory
+mkdir -p credential_free_mobile
+cp simple_mobile.py credential_free_mobile/main.py
+
+# Remove any existing credential files from build
+rm -f credential_free_mobile/*.json
+rm -f credential_free_mobile/*.env
+rm -f credential_free_mobile/*.key
+
+# Build APK with credential-free app
+poetry run flet build apk credential_free_mobile
 
 echo "Build process finished. You can find the APK in the build/apk/ directory."
