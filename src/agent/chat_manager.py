@@ -361,7 +361,7 @@ class ChatManager:
         # Specific agent test command
         if user_message.strip() == "sudo systemctl status agent-adminotaur":
             print(f"[ChatManager] Adminotaur agent test command detected")
-            return self._test_adminotaur_agent()
+            return self._call_adminotaur_agent(user_message)
 
         # Check for debug command
         if user_message.strip() == "!debug":
@@ -741,6 +741,30 @@ class ChatManager:
         except Exception as e:
             return f"❌ App status report error: {e}"
     
+    def _call_adminotaur_agent(self, user_message: str) -> str:
+        """Call the adminotaur agent with the user message."""
+        try:
+            # Check if adminotaur is enabled
+            agent_info = self.get_enabled_agent()
+            if not agent_info or agent_info.get("id") != "adminotaur":
+                return "❌ Adminotaur agent not found or not enabled. Use '!enable agent adminotaur' to enable it."
+            
+            # Check if agent files exist
+            agent_dir = self.store_root / "agent" / "adminotaur"
+            script_path = agent_dir / "adminotaur.py"
+            
+            if not script_path.exists():
+                return "❌ Adminotaur script not found. Agent may not be properly installed."
+            
+            print(f"[ChatManager] Adminotaur Agent is installed & enabled. Calling adminotaur agent now...")
+            
+            # Call the agent with the user message
+            return self.invoke_agent("adminotaur", user_message, [], "")
+            
+        except Exception as e:
+            print(f"[ChatManager] Error calling adminotaur agent: {e}")
+            return f"❌ Error calling adminotaur agent: {e}"
+    
     def _test_adminotaur_agent(self) -> str:
         """Test the adminotaur agent with a quick health check."""
         try:
@@ -785,6 +809,8 @@ class ChatManager:
                 print("[ChatManager] Environment setup complete, testing agent...")
                 # Don't recurse - just continue with the test below
             
+            # The adminotaur.py script will handle reading its own capabilities
+            
             # Run a quick test command
             test_payload = {
                 "message": "health_check",
@@ -827,11 +853,8 @@ class ChatManager:
             except json.JSONDecodeError:
                 response_text = output
             
-            # Check if response indicates readiness
-            if "ready" in response_text.lower() or "health" in response_text.lower() or "ok" in response_text.lower():
-                return "✅ Decyphertek AI is ready"
-            else:
-                return f"✅ Adminotaur agent is responding: {response_text}"
+            # Return the agent's response directly (it already includes status and capabilities)
+            return response_text
                 
         except subprocess.TimeoutExpired:
             return "❌ Adminotaur agent test timed out (30 seconds)"
