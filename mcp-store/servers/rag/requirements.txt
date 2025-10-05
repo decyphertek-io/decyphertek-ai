@@ -1,3 +1,0 @@
-qdrant-client
-httpx
-mcp
