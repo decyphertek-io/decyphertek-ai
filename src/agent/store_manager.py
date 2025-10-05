@@ -35,8 +35,8 @@ import importlib.util
 class StoreManager:
     def __init__(self, registry_url: Optional[str] = None) -> None:
         self.project_root = Path(__file__).resolve().parents[2]
-        # Store layout: ./store/agent/<personality>
-        self.local_store_root = self.project_root / "store" / "agent"
+        # Store layout: ./src/store/agent/<personality>
+        self.local_store_root = self.project_root / "src" / "store" / "agent"
         self.enabled_state_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
 
         self.registry_url = (
