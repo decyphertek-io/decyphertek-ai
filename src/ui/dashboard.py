@@ -15,7 +15,7 @@ from ui.api_settings import APISettingsView
 from ui.ollama_settings import OllamaSettingsView
 from ui.rag_view import RAGView
 from rag.document_manager import DocumentManager
-from agent.langchain_agent import DecypherTekAgent
+from agent.store_manager import DecypherTekAgent, StoreManager
 
 
 class DashboardView:
@@ -63,10 +63,10 @@ class DashboardView:
             print("[Dashboard] RAG features will be disabled")
             self.document_manager = None
         
-        # Initialize AI client (OpenRouter or Ollama based on provider)
+        # Initialize AI client/agent lazily (after UI renders)
         self.ai_client = None
         self.agent = None
-        self._init_ai_client()
+        self._ai_init_started = False
         
         # UI state
         self.current_index = 0
@@ -74,6 +74,9 @@ class DashboardView:
         self.navigation_bar = None
         self.chat_view = None
         self.rag_view = None
+        # Store manager (for Agent Store personalities)
+        self.store_manager = StoreManager()
+        self._agents_init_started = False
         
         # View mode
         self.showing_api_settings = False
@@ -97,7 +100,8 @@ class DashboardView:
                     ai_client=self.ai_client,
                     provider='ollama',
                     enable_tools=True,
-                    doc_manager=self.document_manager
+                    doc_manager=self.document_manager,
+                    page=self.page
                 )
                 print(f"[Dashboard] Agent initialized with Ollama")
             else:
@@ -116,7 +120,8 @@ class DashboardView:
                 ai_client=self.ai_client,
                 provider='duckduckgo',
                 enable_tools=True,
-                doc_manager=self.document_manager
+                doc_manager=self.document_manager,
+                page=self.page
             )
             print(f"[Dashboard] Agent initialized with DuckDuckGo")
             
@@ -136,7 +141,8 @@ class DashboardView:
                     ai_client=self.ai_client,
                     provider='openrouter',
                     enable_tools=True,
-                    doc_manager=self.document_manager
+                    doc_manager=self.document_manager,
+                    page=self.page
                 )
                 print(f"[Dashboard] Agent initialized with OpenRouter")
             else:
@@ -145,6 +151,21 @@ class DashboardView:
     def build(self) -> ft.View:
         """Build the dashboard view"""
         
+        # Start AI init in background on first build
+        if not self._ai_init_started:
+            self._ai_init_started = True
+            import threading
+            def _bg_init():
+                try:
+                    self._init_ai_client()
+                    # If chat view already built, refresh it to bind agent
+                    if self.chat_view:
+                        self.chat_view.agent = self.agent
+                    self.page.update()
+                except Exception as e:
+                    print(f"[Dashboard] Background AI init error: {e}")
+            threading.Thread(target=_bg_init, daemon=True).start()
+
         # Content area
         self.content_area = ft.Container(
             content=self._build_chat_tab(),
@@ -241,9 +262,7 @@ class DashboardView:
         if not self.api_key_manager.has_openrouter_key():
             return self._build_api_setup_prompt()
         
-        # Re-init client if needed
-        if not self.ai_client:
-            self._init_ai_client()
+        # Proceed to build full chat view; agent binds when background init completes
         
         # Build chat view
         if not self.chat_view:
@@ -789,177 +808,150 @@ class DashboardView:
         self.page.update()
     
     def _build_agents_tab(self) -> ft.Control:
-        """Build Agents tab with LangChain agents"""
-        return ft.Container(
-            content=ft.Column(
-                controls=[
-                    # AppBar
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.icons.SMART_TOY, size=28),
-                                ft.Text(
-                                    "AI Agents",
-                                    size=22,
-                                    weight=ft.FontWeight.BOLD
-                                ),
-                                ft.Container(expand=True),
-                                ft.IconButton(
-                                    icon=ft.icons.REFRESH,
-                                    tooltip="Refresh",
-                                    on_click=lambda e: self._refresh_agents_tab()
-                                ),
-                            ]
-                        ),
-                        padding=15,
-                        bgcolor=ft.colors.SURFACE_VARIANT
-                    ),
-                    
-                    # Agents content
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Container(height=20),
-                            
-                            # LangChain Integration
-                            ft.Row([
-                                ft.Text("LangChain Agents", size=14, weight=ft.FontWeight.BOLD),
-                                ft.Container(expand=True),
-                                ft.Icon(
-                                    ft.icons.CHECK_CIRCLE if self._is_langchain_configured() else ft.icons.WARNING,
-                                    size=20,
-                                    color=ft.colors.GREEN if self._is_langchain_configured() else ft.colors.ORANGE
-                                ),
-                            ]),
-                            ft.Container(height=5),
-                            ft.Text(
-                                "Build agents with LangChain and LangGraph",
-                                size=12,
-                                color=ft.colors.GREY_600
-                            ),
-                            ft.Container(height=10),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Row([
-                                        ft.Icon(ft.icons.PSYCHOLOGY, size=20, color=ft.colors.BLUE),
-                                        ft.Text("Status: ", size=12, color=ft.colors.GREY_700),
-                                        ft.Text(
-                                            "Ready" if self._is_langchain_configured() else "Configure OpenRouter",
-                                            size=12,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=ft.colors.GREEN if self._is_langchain_configured() else ft.colors.ORANGE
-                                        ),
-                                    ]),
-                                    ft.Container(height=10),
-                                    ft.Row([
-                                        ft.ElevatedButton(
-                                            "📚 Documentation",
-                                            on_click=lambda e: self.page.launch_url("https://python.langchain.com/docs/tutorials/"),
-                                            expand=True,
-                                            style=ft.ButtonStyle(
-                                                bgcolor=ft.colors.BLUE,
-                                                color=ft.colors.WHITE
-                                            )
-                                        ),
-                                        ft.TextButton(
-                                            "🦜 LangGraph",
-                                            on_click=lambda e: self.page.launch_url("https://langchain-ai.github.io/langgraph/"),
-                                            style=ft.ButtonStyle(color=ft.colors.BLUE)
-                                        ),
-                                    ]),
-                                ]),
-                                bgcolor=ft.colors.BLUE_50,
-                                border_radius=10,
-                                padding=15
-                            ),
-                            
-                            ft.Container(height=20),
-                            ft.Divider(),
-                            ft.Container(height=20),
-                            
-                            # Local Agent Store
-                            ft.Text("Local Agent Store", size=14, weight=ft.FontWeight.BOLD),
-                            ft.Container(height=5),
-                            ft.Text(
-                                "Browse and deploy agents from your local store",
-                                size=12,
-                                color=ft.colors.GREY_600
-                            ),
-                            ft.Container(height=10),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Row([
-                                        ft.Icon(ft.icons.FOLDER_OPEN, size=20, color=ft.colors.GREEN),
-                                        ft.Text("Store Path", weight=ft.FontWeight.W_500),
-                                    ]),
-                                    ft.Container(height=10),
-                                    ft.TextField(
-                                        label="Agent Store Directory",
-                                        hint_text="./agent-store",
-                                        value="./agent-store",
-                                        border_color=ft.colors.GREEN_200,
-                                        expand=True,
-                                        read_only=True
-                                    ),
-                                    ft.Container(height=10),
-                                    ft.Row([
-                                        ft.ElevatedButton(
-                                            "🔍 Browse Agents",
-                                            on_click=lambda e: self._show_agent_store_browser(),
-                                            expand=True,
-                                            style=ft.ButtonStyle(
-                                                bgcolor=ft.colors.GREEN,
-                                                color=ft.colors.WHITE
-                                            )
-                                        ),
-                                        ft.TextButton(
-                                            "📝 Create Agent",
-                                            on_click=lambda e: self._show_create_agent_dialog(),
-                                            style=ft.ButtonStyle(color=ft.colors.GREEN)
-                                        ),
-                                    ]),
-                                ]),
-                                bgcolor=ft.colors.GREEN_50,
-                                border_radius=10,
-                                padding=15
-                            ),
-                            
-                            ft.Container(height=20),
-                            ft.Divider(),
-                            ft.Container(height=20),
-                            
-                            # Available Agent Templates
-                            ft.Row([
-                                ft.Text("Agent Templates", size=14, weight=ft.FontWeight.BOLD),
-                                ft.Container(expand=True),
-                                ft.Text(
-                                    f"{len(self._get_active_agents())}/{len(self._get_agent_templates())} active",
-                                    size=12,
-                                    color=ft.colors.GREY_600
-                                ),
-                            ]),
-                            ft.Container(height=10),
-                            
-                            # Agent template cards
-                            ft.Column([
-                                self._create_agent_card(
-                                    agent["name"],
-                                    agent["description"],
-                                    agent["icon"],
-                                    agent["color"],
-                                    agent["id"],
-                                    active=agent["id"] in self._get_active_agents()
-                                ) for agent in self._get_agent_templates()
-                            ]),
-                            
-                        ], scroll=ft.ScrollMode.AUTO, expand=True),
-                        padding=20,
-                        expand=True
-                    ),
+        """Minimal Agents tab driven by StoreManager and personality.json"""
+        # Kick off background fetch on first render, don't block UI
+        if not self._agents_init_started:
+            self._agents_init_started = True
+            import threading
+            def _bg_fetch():
+                try:
+                    self.store_manager.fetch_registry()
+                except Exception as e:
+                    print(f"[Agents] Registry fetch error: {e}")
+                self._refresh_agents_tab()
+            threading.Thread(target=_bg_fetch, daemon=True).start()
+
+        # Render instantly from local state only; avoid any network-bound calls here
+        default_id = "adminotaur"
+        try:
+            installed = self.store_manager.is_installed(default_id)
+            enabled = self.store_manager.is_enabled(default_id)
+            agents = [{
+                "id": default_id,
+                "name": "Adminotaur",
+                "description": "Default personality",
+                "installed": installed,
+                "enabled": enabled,
+            }]
+        except Exception:
+            agents = []
+
+        def install_default(_):
+            res = self.store_manager.install_agent(default_id)
+            self._refresh_agents_tab()
+
+        def toggle_enabled(agent_id: str, enabled: bool):
+            self.store_manager.set_enabled(agent_id, enabled)
+            self._refresh_agents_tab()
+
+        # Build card for default agent only (simple as requested)
+        cards = []
+        for a in agents:
+            if a["id"] != default_id:
+                continue
+            # Action controls: show Download if not installed; otherwise show Enable/Disable switch
+            action_controls = []
+            if not a["installed"]:
+                action_controls.append(
+                    ft.IconButton(
+                        icon=ft.icons.DOWNLOAD,
+                        tooltip="Install",
+                        on_click=install_default
+                    )
+                )
+            else:
+                action_controls.append(
+                    ft.Switch(
+                        value=a["enabled"],
+                        on_change=lambda e, aid=a["id"]: toggle_enabled(aid, e.control.value),
+                        tooltip="Enable/Disable"
+                    )
+                )
+
+            cards.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.icons.SMART_TOY, size=22, color=ft.colors.BLUE),
+                        ft.Column([
+                            ft.Text(a["name"], size=14, weight=ft.FontWeight.W_600),
+                            ft.Text("Default personality from Agent Store", size=11, color=ft.colors.GREY_600),
+                        ], spacing=2, expand=True),
+                        ft.Row(action_controls),
+                    ]),
+                    bgcolor=ft.colors.SURFACE_VARIANT,
+                    border_radius=8,
+                    padding=10
+                )
+            )
+
+        # Add + button for custom store URL (no heavy UI)
+        def add_custom_store(_):
+            dialog = ft.AlertDialog(
+                title=ft.Text("Add custom Agent Store URL"),
+                content=ft.TextField(label="Raw personality.json URL", value="https://raw.githubusercontent.com/decyphertek-io/agent-store/main/personality.json", expand=True),
+                actions=[
+                    ft.TextButton("Close", on_click=lambda e: self.page.close(dialog)),
                 ],
-                expand=True
-            ),
+            )
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
+        # Bottom-left + button to add custom store URL
+        add_store_fab = ft.IconButton(
+            icon=ft.icons.ADD_CIRCLE,
+            icon_color=ft.colors.BLUE,
+            tooltip="Add Store",
+            on_click=lambda e: self._agents_add_custom_store()
+        )
+
+        return ft.Container(
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.icons.SMART_TOY, size=28),
+                        ft.Text("Agents", size=22, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        ft.IconButton(icon=ft.icons.ADD, tooltip="Add Store", on_click=lambda e: self._agents_add_custom_store()),
+                        ft.IconButton(icon=ft.icons.REFRESH, tooltip="Refresh", on_click=lambda e: self._refresh_agents_tab()),
+                    ]),
+                    padding=15,
+                    bgcolor=ft.colors.SURFACE_VARIANT
+                ),
+                ft.Container(height=10),
+                *(cards or [ft.Text("No personalities found.", size=12, color=ft.colors.GREY_600)]),
+                ft.Row([add_store_fab], alignment=ft.MainAxisAlignment.START),
+            ], expand=True, spacing=10),
+            expand=True,
+        )
+
+    def _agents_add_custom_store(self):
+        url_field = ft.TextField(
+            label="Raw personality.json URL",
+            hint_text="https://raw.githubusercontent.com/your-org/agent-store/main/personality.json",
+            value="",
             expand=True
         )
+
+        def apply_url(_):
+            url = url_field.value.strip()
+            if url:
+                self.store_manager.set_registry_url(url)
+                self.store_manager.fetch_registry()
+                self.page.close(dialog)
+                self._refresh_agents_tab()
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Add custom Agent Store"),
+            content=url_field,
+            actions=[
+                ft.TextButton("Cancel", on_click=lambda e: self.page.close(dialog)),
+                ft.ElevatedButton("Apply", icon=ft.icons.CHECK, on_click=apply_url),
+            ],
+        )
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
     
     def _create_agent_card(self, title: str, description: str, icon, color, agent_id: str, active: bool = False):
         """Create an agent card with activation status"""

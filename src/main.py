@@ -1,3 +1,4 @@
+
 """
 DecypherTek AI - Mobile App
 Main entry point for the Flet application
@@ -178,4 +179,3 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     # For development testing
     ft.app(target=main)
-
