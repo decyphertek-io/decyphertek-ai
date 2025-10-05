@@ -28,6 +28,7 @@ import json
 import os
 import urllib.request
 from pathlib import Path
+import threading
 from typing import Any, Dict, List, Optional
 import importlib.util
 
@@ -52,6 +53,8 @@ class StoreManager:
         self.mcp_registry: Dict[str, Any] = {}
         self.mcp_enabled_state_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
         self.mcp_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.mcp_enabled_state_path)
+        # Kick off background sync to auto-install defaults and refresh cache
+        self._start_mcp_background_sync()
 
         # App store configuration
         self.app_local_root = self.project_root / "src" / "store" / "app"
@@ -320,6 +323,48 @@ class StoreManager:
             return {"success": True, "message": f"Installed '{server_id}'"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _start_mcp_background_sync(self) -> None:
+        """Auto-install and enable default MCP servers, then refresh cache for UI."""
+        def _bg():
+            try:
+                registry = self.fetch_mcp_registry()
+                servers = (registry.get("servers") or {}) if isinstance(registry, dict) else {}
+                for sid, info in servers.items():
+                    if info.get("enable_by_default", False):
+                        try:
+                            if not self.is_mcp_installed(sid):
+                                res = self.install_mcp_server(sid)
+                                if not res.get("success"):
+                                    continue
+                            # Ensure enabled and cache reflects state
+                            self.set_mcp_enabled(sid, True)
+                            self._write_mcp_cache_entry(sid, installed=True, enabled=True)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _write_mcp_cache_entry(self, sid: str, installed: bool | None = None, enabled: bool | None = None) -> None:
+        """Write to src/store/mcp/cache.json so UI updates show installed/enabled."""
+        local_root = self.project_root / "src" / "store" / "mcp"
+        cache_path = local_root / "cache.json"
+        try:
+            local_root.mkdir(parents=True, exist_ok=True)
+            data: Dict[str, Any] = {}
+            if cache_path.exists():
+                data = json.loads(cache_path.read_text(encoding="utf-8"))
+            entry = data.get(sid, {})
+            if installed is not None:
+                entry["installed"] = bool(installed)
+            if enabled is not None:
+                entry["enabled"] = bool(enabled)
+            data[sid] = entry
+            cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     # ------------------
     # Shared utilities

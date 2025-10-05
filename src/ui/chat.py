@@ -5,6 +5,11 @@ Chat interface for OpenRouter AI with session management
 
 import flet as ft
 from typing import List, Dict
+import inspect
+import subprocess
+import json
+import os
+from pathlib import Path
 import asyncio
 from chat.chat_sessions import ChatSessionManager
 
@@ -388,12 +393,13 @@ class ChatView:
             
             print(f"[Chat] Calling API with {len(messages_to_send)} messages in history")
             
-            # Get response - Use agent if available for tool use
-            if self.agent:
-                print("[Chat] Using agent with tool capabilities")
-                response = await self.agent.chat(user_message, context=rag_context if rag_context else None)
+            # Agent personality subprocess (optional): trigger only with explicit prefix
+            if user_message.strip().startswith("!agent "):
+                payload = user_message.strip()[7:]
+                response = self._call_personality_subprocess(payload, rag_context)
             else:
-                print("[Chat] Using direct client (no agent)")
+                # Get response - Always use direct client for chat; agent is separate for tools
+                print("[Chat] Using direct client for chat")
                 response = await self.client.send_message(messages_to_send)
             
             print(f"[Chat] Got response: {response[:100] if response else 'None'}...")
@@ -435,6 +441,60 @@ class ChatView:
             self.send_button.disabled = False
             self.page.update()
             print("[Chat] Message complete, UI re-enabled")
+
+    def _call_personality_subprocess(self, user_payload: str, rag_context: str | None) -> str:
+        """Invoke enabled personality script in its venv (Chaquopy-style layout).
+
+        Looks for: src/store/agent/<enabled>/adminotaur.py with .venv under that folder.
+        Expects the script to read JSON on stdin and print a JSON with {"text": "..."}.
+        """
+        try:
+            store_root = Path("src/store/agent")
+            # Determine enabled agent from local cache (no store manager usage)
+            cache_path = store_root / "cache.json"
+            agent_id = "adminotaur"
+            try:
+                if cache_path.exists():
+                    data = json.loads(cache_path.read_text(encoding="utf-8"))
+                    # cache format: {"<id>": {"installed": bool, "enabled": bool}, ...}
+                    for aid, meta in data.items():
+                        if isinstance(meta, dict) and meta.get("installed") and meta.get("enabled"):
+                            agent_id = aid
+                            break
+            except Exception:
+                pass
+            agent_dir = store_root / agent_id
+            venv_python = agent_dir / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
+            script_path = agent_dir / "adminotaur.py"
+            if not script_path.exists():
+                return "Agent personality not installed."
+            py_exec = str(venv_python) if venv_python.exists() else "python"
+            payload = {
+                "message": user_payload,
+                "context": rag_context or "",
+                "env": {
+                    "cwd": str(agent_dir)
+                }
+            }
+            proc = subprocess.run(
+                [py_exec, str(script_path)],
+                input=json.dumps(payload).encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(agent_dir),
+                timeout=60
+            )
+            if proc.returncode != 0:
+                err = proc.stderr.decode("utf-8", errors="ignore")
+                return f"Agent error: {err.strip() or proc.returncode}"
+            out = proc.stdout.decode("utf-8", errors="ignore").strip()
+            try:
+                data = json.loads(out)
+                return data.get("text") or out
+            except Exception:
+                return out
+        except Exception as e:
+            return f"Agent invocation failed: {e}"
     
     def _add_message(self, role: str, content: str, save_to_session: bool = True):
         """Add message to chat display and optionally save to session"""
