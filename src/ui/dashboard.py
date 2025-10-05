@@ -166,7 +166,7 @@ class DashboardView:
                 except Exception as e:
                     print(f"[Dashboard] Background AI init error: {e}")
             threading.Thread(target=_bg_init, daemon=True).start()
-
+        
         # Content area
         self.content_area = ft.Container(
             content=self._build_chat_tab(),

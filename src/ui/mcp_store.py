@@ -1,296 +1,273 @@
 import flet as ft
+import json
+import threading
+import urllib.request
+from pathlib import Path
 
 
 class MCPStoreView:
-    """MCP Store tab UI isolated from dashboard logic.
+    """Minimal MCP Store tab.
 
-    - Renders instantly
-    - Purely UI; no blocking network calls
+    - Loads instantly from local cache: src/store/mcp/cache.json
+    - Fetches remote skills.json in background and refreshes
+    - Not installed => Download button; Installing => spinner; Installed => Enable/Disable switch
+    - "+" button to set a custom skills.json URL
     """
 
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, skills_url: str | None = None):
         self.page = page
+        self.skills_url = (
+            skills_url
+            or "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        )
+        self.project_root = Path(__file__).resolve().parents[2]
+        self.local_root = self.project_root / "src" / "store" / "mcp"
+        self.cache_path = self.local_root / "cache.json"
+        self.registry: dict = {}
+        self._init_started = False
+        self._installing: dict[str, bool] = {}
 
     def build(self) -> ft.Control:
+        # Background fetch once; do not block render
+        if not self._init_started:
+            self._init_started = True
+
+            def _bg_fetch():
+                try:
+                    self.registry = self._fetch_skills()
+                except Exception as e:
+                    print(f"[MCPStore] Fetch error: {e}")
+                self._refresh()
+
+            threading.Thread(target=_bg_fetch, daemon=True).start()
+
+        servers = self._servers_for_ui()
+
+        header = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.icons.CLOUD, size=28),
+                    ft.Text("MCP Servers", size=22, weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    ft.IconButton(icon=ft.icons.ADD, tooltip="Add Store", on_click=lambda e: self._add_custom_store()),
+                    ft.IconButton(icon=ft.icons.REFRESH, tooltip="Refresh", on_click=lambda e: self._refresh()),
+                ]
+            ),
+            padding=15,
+            bgcolor=ft.colors.SURFACE_VARIANT,
+        )
+
+        list_column = ft.Column(
+            [
+                self._server_row(s) for s in servers
+            ],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+
         return ft.Container(
             content=ft.Column(
-                controls=[
-                    # AppBar
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.icons.CLOUD, size=28),
-                                ft.Text(
-                                    "MCP Servers",
-                                    size=22,
-                                    weight=ft.FontWeight.BOLD
-                                ),
-                                ft.Container(expand=True),
-                                ft.IconButton(
-                                    icon=ft.icons.REFRESH,
-                                    tooltip="Refresh",
-                                    on_click=lambda e: self._refresh()
-                                ),
-                            ]
-                        ),
-                        padding=15,
-                        bgcolor=ft.colors.SURFACE_VARIANT
-                    ),
-
-                    # MCP content
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Container(height=20),
-
-                            # Smithery AI
-                            ft.Row([
-                                ft.Text("Smithery AI", size=14, weight=ft.FontWeight.BOLD),
-                                ft.Container(expand=True),
-                                ft.Icon(
-                                    ft.icons.CHECK_CIRCLE if False else ft.icons.WARNING,
-                                    size=20,
-                                    color=ft.colors.GREEN if False else ft.colors.ORANGE
-                                ),
-                            ]),
-                            ft.Container(height=5),
-                            ft.Text(
-                                "Build FastMCP servers with session-scoped configuration",
-                                size=12,
-                                color=ft.colors.GREY_600
-                            ),
-                            ft.Container(height=10),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Row([
-                                        ft.Icon(ft.icons.ROCKET_LAUNCH, size=20, color=ft.colors.PURPLE),
-                                        ft.Text("Status: ", size=12, color=ft.colors.GREY_700),
-                                        ft.Text(
-                                            "Not Configured",
-                                            size=12,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=ft.colors.ORANGE
-                                        ),
-                                    ]),
-                                    ft.Container(height=10),
-                                    ft.Row([
-                                        ft.ElevatedButton(
-                                            "🔑 Configure API",
-                                            on_click=lambda e: self._show_smithery_config(),
-                                            expand=True,
-                                            style=ft.ButtonStyle(
-                                                bgcolor=ft.colors.PURPLE,
-                                                color=ft.colors.WHITE
-                                            )
-                                        ),
-                                        ft.TextButton(
-                                            "📖 Docs",
-                                            on_click=lambda e: self.page.launch_url("https://pypi.org/project/smithery/"),
-                                            style=ft.ButtonStyle(color=ft.colors.PURPLE)
-                                        ),
-                                    ]),
-                                ]),
-                                bgcolor=ft.colors.PURPLE_50,
-                                border_radius=10,
-                                padding=15
-                            ),
-
-                            ft.Container(height=20),
-                            ft.Divider(),
-                            ft.Container(height=20),
-
-                            # Custom MCP Store
-                            ft.Text("Custom MCP Store", size=14, weight=ft.FontWeight.BOLD),
-                            ft.Container(height=5),
-                            ft.Text(
-                                "Connect to your custom MCP server repository",
-                                size=12,
-                                color=ft.colors.GREY_600
-                            ),
-                            ft.Container(height=10),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Row([
-                                        ft.Icon(ft.icons.STORAGE, size=20, color=ft.colors.BLUE),
-                                        ft.Text("GitHub Repository", weight=ft.FontWeight.W_500),
-                                    ]),
-                                    ft.Container(height=10),
-                                    ft.TextField(
-                                        label="Repository URL",
-                                        hint_text="https://github.com/username/mcp-store",
-                                        border_color=ft.colors.BLUE_200,
-                                        expand=True
-                                    ),
-                                    ft.Container(height=10),
-                                    ft.Row([
-                                        ft.ElevatedButton(
-                                            "🔍 Browse Servers",
-                                            on_click=lambda e: self._show_custom_store_browser(),
-                                            expand=True,
-                                            style=ft.ButtonStyle(
-                                                bgcolor=ft.colors.BLUE,
-                                                color=ft.colors.WHITE
-                                            )
-                                        ),
-                                        ft.TextButton(
-                                            "Default Store",
-                                            on_click=lambda e: self._load_default_mcp_store(),
-                                            style=ft.ButtonStyle(color=ft.colors.BLUE)
-                                        ),
-                                    ]),
-                                ]),
-                                bgcolor=ft.colors.BLUE_50,
-                                border_radius=10,
-                                padding=15
-                            ),
-
-                            ft.Container(height=20),
-                            ft.Divider(),
-                            ft.Container(height=20),
-
-                            # Available Servers from Store (static placeholders; wire to real list later)
-                            ft.Row([
-                                ft.Text("Available Servers", size=14, weight=ft.FontWeight.BOLD),
-                                ft.Container(expand=True),
-                            ]),
-                            ft.Container(height=10),
-
-                            ft.Column([
-                                self._create_mcp_server_card("Web Search", "Search the web using Python", ft.icons.SEARCH, ft.colors.GREEN, "web-search"),
-                                self._create_mcp_server_card("Nextcloud", "Access Nextcloud files and folders", ft.icons.CLOUD, ft.colors.BLUE, "nextcloud"),
-                                self._create_mcp_server_card("Google Drive", "Import documents from Google Drive", ft.icons.FOLDER, ft.colors.GREEN, "google-drive"),
-                            ], scroll=ft.ScrollMode.AUTO, expand=True),
-
-                        ], scroll=ft.ScrollMode.AUTO, expand=True),
-                        padding=20,
-                        expand=True
-                    ),
+                [
+                    header,
+                    ft.Container(height=10),
+                    list_column if servers else ft.Text("No servers cached yet.", size=12, color=ft.colors.GREY_600),
                 ],
-                expand=True
+                expand=True,
             ),
-            expand=True
+            expand=True,
         )
 
-    def _create_mcp_server_card(self, title: str, description: str, icon, color, server_id: str, connected: bool = False):
+    def _refresh(self):
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    # ------------
+    # UI builders
+    # ------------
+    def _server_row(self, s: dict) -> ft.Control:
+        sid = s["id"]
+        installed = s.get("installed", False)
+        enabled = s.get("enabled", False)
+
+        if self._installing.get(sid):
+            action = ft.ProgressRing(width=20, height=20)
+        elif not installed:
+            action = ft.IconButton(icon=ft.icons.DOWNLOAD, tooltip="Install", on_click=lambda e, sid=sid: self._install_server(sid))
+        else:
+            action = ft.Switch(value=enabled, on_change=lambda e, sid=sid: self._set_enabled(sid, e.control.value), tooltip="Enable/Disable")
+
         return ft.Container(
-            content=ft.Row([
-                ft.Icon(icon, size=24, color=color),
-                ft.Column([
-                    ft.Row([
-                        ft.Text(title, size=14, weight=ft.FontWeight.W_500),
-                        ft.Icon(
-                            ft.icons.CHECK_CIRCLE if connected else ft.icons.CIRCLE_OUTLINED,
-                            size=14,
-                            color=ft.colors.GREEN if connected else ft.colors.GREY_400
-                        ),
-                    ], spacing=5),
-                    ft.Text(description, size=11, color=ft.colors.GREY_600),
-                ], spacing=2, expand=True),
-                ft.Row([
-                    ft.IconButton(
-                        icon=ft.icons.SETTINGS if connected else ft.icons.ADD,
-                        tooltip="Configure" if connected else "Connect",
-                        icon_color=ft.colors.BLUE if connected else ft.colors.GREEN,
-                        on_click=lambda e: self._show_mcp_installer(server_id)
-                    ),
-                ]),
-            ]),
-            bgcolor=ft.colors.GREEN_50 if connected else ft.colors.SURFACE_VARIANT,
+            content=ft.Row(
+                [
+                    ft.Icon(ft.icons.CLOUD, size=24, color=ft.colors.BLUE),
+                    ft.Column([
+                        ft.Text(self._name_for(sid), size=14, weight=ft.FontWeight.W_600),
+                        ft.Text(f"{sid}", size=11, color=ft.colors.GREY_600),
+                    ], spacing=2, expand=True),
+                    action,
+                ]
+            ),
+            bgcolor=ft.colors.SURFACE_VARIANT,
             border_radius=8,
-            padding=10
+            padding=10,
         )
 
-    def _show_mcp_installer(self, server_name: str):
-        info_map = {
-            "nextcloud": {
-                "title": "Nextcloud MCP Server",
-                "description": "Connect to your Nextcloud instance to import files and folders",
-                "github": "https://github.com/decyphertek-io/mcp-store/tree/main/servers/nextcloud",
-                "icon": ft.icons.CLOUD,
-                "color": ft.colors.BLUE
-            }
-        }
-        info = info_map.get(server_name, {
-            "title": f"{server_name} MCP Server",
-            "description": "Installation coming soon",
-            "github": "https://github.com/decyphertek-io/mcp-store/tree/main/servers",
-            "icon": ft.icons.CLOUD,
-            "color": ft.colors.BLUE
-        })
-
-        dialog = ft.AlertDialog(
-            title=ft.Row([
-                ft.Icon(info["icon"], color=info["color"]),
-                ft.Text(info["title"]),
-            ]),
-            content=ft.Column([
-                ft.Text(info["description"]),
-                ft.Container(height=10),
-                ft.Text("GitHub Repository:", size=12, weight=ft.FontWeight.BOLD),
-                ft.TextButton(
-                    info["github"],
-                    on_click=lambda e: self.page.launch_url(info["github"]),
-                    style=ft.ButtonStyle(color=ft.colors.BLUE)
-                ),
-            ], tight=True),
-            actions=[
-                ft.TextButton("Close", on_click=lambda e: self.page.close(dialog)),
-            ],
+    # -----------------
+    # Actions & helpers
+    # -----------------
+    def _add_custom_store(self):
+        url_field = ft.TextField(
+            label="Raw skills.json URL",
+            hint_text="https://raw.githubusercontent.com/your-org/mcp-store/main/skills.json",
+            value="",
+            expand=True,
         )
-        self.page.overlay.append(dialog)
-        dialog.open = True
-        self.page.update()
 
-    def _show_smithery_config(self):
-        api_key_field = ft.TextField(label="Smithery API Key", hint_text="sk-smithery-...", password=True, can_reveal_password=True)
-        server_url_field = ft.TextField(label="Server URL (optional)", hint_text="http://localhost:8000")
-
-        def save_config(e):
+        def apply_url(_):
+            url = url_field.value.strip()
+            if url:
+                self.skills_url = url
+                # Refetch in background
+                def _bg():
+                    try:
+                        self.registry = self._fetch_skills()
+                    except Exception as e:
+                        print(f"[MCPStore] Custom fetch error: {e}")
+                    self._refresh()
+                threading.Thread(target=_bg, daemon=True).start()
             self.page.close(dialog)
-            snackbar = ft.SnackBar(content=ft.Text("✓ Smithery configured!"), bgcolor=ft.colors.GREEN)
-            self.page.overlay.append(snackbar)
-            snackbar.open = True
             self._refresh()
 
         dialog = ft.AlertDialog(
-            title=ft.Row([ft.Icon(ft.icons.ROCKET_LAUNCH, color=ft.colors.PURPLE), ft.Text("Configure Smithery")]),
-            content=ft.Column([
-                ft.Text("Enter your Smithery API credentials", size=12, color=ft.colors.GREY_600),
-                ft.Container(height=15),
-                api_key_field,
-                ft.Container(height=10),
-                server_url_field,
-            ], tight=True, height=220),
+            title=ft.Text("Add custom MCP Store"),
+            content=url_field,
             actions=[
                 ft.TextButton("Cancel", on_click=lambda e: self.page.close(dialog)),
-                ft.ElevatedButton("Save", icon=ft.icons.SAVE, on_click=save_config, style=ft.ButtonStyle(bgcolor=ft.colors.PURPLE, color=ft.colors.WHITE))
+                ft.ElevatedButton("Apply", icon=ft.icons.CHECK, on_click=apply_url),
             ],
         )
         self.page.overlay.append(dialog)
         dialog.open = True
         self.page.update()
 
-    def _show_custom_store_browser(self):
-        dialog = ft.AlertDialog(
-            title=ft.Text("🔍 Browse Custom MCP Store"),
-            content=ft.Column([
-                ft.Text("Enter your GitHub repository URL:", size=12, color=ft.colors.GREY_600),
-                ft.Container(height=10),
-                ft.TextField(label="GitHub URL", hint_text="https://github.com/decyphertek-io/mcp-store"),
-            ], tight=True),
-            actions=[
-                ft.TextButton("Close", on_click=lambda e: self.page.close(dialog)),
-            ],
-        )
-        self.page.overlay.append(dialog)
-        dialog.open = True
-        self.page.update()
+    def _install_server(self, sid: str):
+        if self._installing.get(sid):
+            return
+        self._installing[sid] = True
+        self._refresh()
 
-    def _load_default_mcp_store(self):
-        snackbar = ft.SnackBar(content=ft.Text("✓ Loaded default MCP store: github.com/decyphertek-io/mcp-store"), bgcolor=ft.colors.GREEN)
-        self.page.overlay.append(snackbar)
-        snackbar.open = True
-        self.page.update()
+        def _bg_install():
+            try:
+                info = self.registry.get("servers", {}).get(sid)
+                if not info:
+                    return
+                repo_url = info.get("repo_url")
+                folder_path = info.get("folder_path")
+                dest = self.local_root / sid
+                self._download_contents_recursive(repo_url, folder_path, dest)
+                # enable_by_default support
+                if info.get("enable_by_default", False):
+                    self._set_enabled(sid, True, write_only=True)
+                # mark installed
+                self._write_cache_entry(sid, installed=True)
+            except Exception as e:
+                print(f"[MCPStore] Install error for {sid}: {e}")
+            finally:
+                self._installing[sid] = False
+                self._refresh()
 
-    def _refresh(self):
-        self.page.update()
+        threading.Thread(target=_bg_install, daemon=True).start()
+
+    def _set_enabled(self, sid: str, value: bool, write_only: bool = False):
+        self._write_cache_entry(sid, enabled=bool(value))
+        if not write_only:
+            self._refresh()
+
+    def _servers_for_ui(self) -> list[dict]:
+        servers = []
+        cache = self._read_cache()
+        if self.registry.get("servers"):
+            for sid, info in self.registry["servers"].items():
+                servers.append({
+                    "id": sid,
+                    "installed": bool(cache.get(sid, {}).get("installed", False)),
+                    "enabled": bool(cache.get(sid, {}).get("enabled", False)),
+                    "name": info.get("name", self._name_for(sid)),
+                    "description": info.get("description", f"{sid}"),
+                })
+        else:
+            for sid in ["web-search", "nextcloud", "google-drive"]:
+                servers.append({
+                    "id": sid,
+                    "installed": bool(cache.get(sid, {}).get("installed", False)),
+                    "enabled": bool(cache.get(sid, {}).get("enabled", False)),
+                    "name": self._name_for(sid),
+                    "description": sid,
+                })
+        return servers
+
+    def _fetch_skills(self) -> dict:
+        with urllib.request.urlopen(self.skills_url, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def _read_cache(self) -> dict:
+        try:
+            self.local_root.mkdir(parents=True, exist_ok=True)
+            if self.cache_path.exists():
+                return json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return {}
+
+    def _write_cache(self, data: dict) -> None:
+        try:
+            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _write_cache_entry(self, sid: str, installed: bool | None = None, enabled: bool | None = None) -> None:
+        data = self._read_cache()
+        entry = data.get(sid, {})
+        if installed is not None:
+            entry["installed"] = installed
+        if enabled is not None:
+            entry["enabled"] = enabled
+        data[sid] = entry
+        self._write_cache(data)
+
+    def _contents_api_url(self, repo_url: str, folder_path: str, ref: str = "main") -> str:
+        try:
+            parts = repo_url.rstrip("/").split("/")
+            owner, repo = parts[-2], parts[-1]
+        except Exception:
+            owner, repo = "decyphertek-io", "mcp-store"
+        folder = folder_path.strip("/")
+        return f"https://api.github.com/repos/{owner}/{repo}/contents/{folder}?ref={ref}"
+
+    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        url = self._contents_api_url(repo_url, folder_path, ref)
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            items = json.loads(resp.read().decode("utf-8"))
+        if isinstance(items, dict) and items.get("message"):
+            raise RuntimeError(items.get("message"))
+        for item in items:
+            itype = item.get("type")
+            name = item.get("name")
+            path = item.get("path")
+            download_url = item.get("download_url")
+            if itype == "file" and download_url:
+                target = dest_dir / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with urllib.request.urlopen(download_url, timeout=20) as fsrc, open(target, "wb") as fdst:
+                    fdst.write(fsrc.read())
+            elif itype == "dir":
+                self._download_contents_recursive(repo_url, path, dest_dir / name, ref)
+
+    def _name_for(self, sid: str):
+        return sid.replace("-", " ").title()
+
 
