@@ -35,7 +35,8 @@ import importlib.util
 class StoreManager:
     def __init__(self, registry_url: Optional[str] = None) -> None:
         self.project_root = Path(__file__).resolve().parents[2]
-        self.local_store_root = self.project_root / "agent-store"
+        # Store layout: ./store/agent/<personality>
+        self.local_store_root = self.project_root / "store" / "agent"
         self.enabled_state_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
 
         self.registry_url = (
@@ -126,11 +127,9 @@ class StoreManager:
 
     def is_installed(self, agent_id: str) -> bool:
         info = self._agent_info(agent_id)
-        extract_to = info.get("extract_to", "agent-store/")
         folder_path = info.get("folder_path", f"{agent_id}/")
-        # Normalize to the same location used by install_agent
-        dest_root = self.project_root / extract_to
-        dest_dir = dest_root / Path(folder_path).name
+        # Install root is always ./store/agent
+        dest_dir = self.local_store_root / Path(folder_path).name
         return dest_dir.exists() and any(dest_dir.iterdir())
 
     def install_agent(self, agent_id: str) -> Dict[str, Any]:
@@ -140,10 +139,9 @@ class StoreManager:
 
         repo_url = info.get("repo_url", "https://github.com/decyphertek-io/agent-store")
         folder_path = info.get("folder_path", f"{agent_id}/")
-        extract_to = info.get("extract_to", "agent-store/")
-
         contents_url = self._contents_api_url(repo_url, folder_path)
-        dest_root = self.project_root / extract_to
+        # Install under ./store/agent
+        dest_root = self.local_store_root
         dest_root.mkdir(parents=True, exist_ok=True)
         dest_dir = dest_root / Path(folder_path).name
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -226,12 +224,9 @@ class StoreManager:
             raise RuntimeError("No agent id provided and no default configured")
 
         info = self._agent_info(agent_id)
-        runtime = info.get("runtime", {})
-        local_module_path = runtime.get("local_module") or (
-            f"{info.get('extract_to','agent-store/')}{info.get('module_path','')}"
-        )
-
-        mod_path = self.project_root / local_module_path
+        # Module path under ./store/agent/<module_path>
+        module_rel = info.get("module_path") or f"{agent_id}/{agent_id}.py"
+        mod_path = self.local_store_root / module_rel
         if not mod_path.exists():
             raise FileNotFoundError(f"Agent module not found at {mod_path}")
 
