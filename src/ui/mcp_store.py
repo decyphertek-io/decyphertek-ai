@@ -26,9 +26,11 @@ class MCPStoreView:
         self.project_root = Path(__file__).resolve().parents[2]
         self.local_root = self.project_root / "src" / "store" / "mcp"
         self.cache_path = self.local_root / "cache.json"
+        self.registry_cache_path = self.local_root / "registry.json"
         self.registry: dict = {}
         self._init_started = False
         self._installing: dict[str, bool] = {}
+        self._list_column: ft.Column | None = None
 
     def build(self) -> ft.Control:
         # Background fetch once; do not block render
@@ -38,11 +40,18 @@ class MCPStoreView:
             def _bg_fetch():
                 try:
                     self.registry = self._fetch_skills()
+                    self._write_registry_cache(self.registry)
                 except Exception as e:
                     print(f"[MCPStore] Fetch error: {e}")
                 self._refresh()
 
             threading.Thread(target=_bg_fetch, daemon=True).start()
+
+        # Load cached registry for instant render
+        if not self.registry:
+            cached_reg = self._read_registry_cache()
+            if isinstance(cached_reg, dict):
+                self.registry = cached_reg
 
         servers = self._servers_for_ui()
 
@@ -60,10 +69,8 @@ class MCPStoreView:
             bgcolor=ft.colors.SURFACE_VARIANT,
         )
 
-        list_column = ft.Column(
-            [
-                self._server_row(s) for s in servers
-            ],
+        self._list_column = ft.Column(
+            [self._server_row(s) for s in servers],
             scroll=ft.ScrollMode.AUTO,
             expand=True,
         )
@@ -73,7 +80,7 @@ class MCPStoreView:
                 [
                     header,
                     ft.Container(height=10),
-                    list_column if servers else ft.Text("No servers cached yet.", size=12, color=ft.colors.GREY_600),
+                    self._list_column if servers else ft.Text("No servers cached yet.", size=12, color=ft.colors.GREY_600),
                 ],
                 expand=True,
             ),
@@ -82,6 +89,12 @@ class MCPStoreView:
 
     def _refresh(self):
         try:
+            # Rebuild rows from latest state
+            if self._list_column is not None:
+                servers = self._servers_for_ui()
+                self._list_column.controls = [self._server_row(s) for s in servers]
+                if getattr(self._list_column, "page", None) is not None:
+                    self._list_column.update()
             self.page.update()
         except Exception:
             pass
@@ -225,6 +238,22 @@ class MCPStoreView:
     def _fetch_skills(self) -> dict:
         with urllib.request.urlopen(self.skills_url, timeout=20) as resp:
             return json.loads(resp.read().decode("utf-8"))
+
+    def _read_registry_cache(self) -> dict:
+        try:
+            self.local_root.mkdir(parents=True, exist_ok=True)
+            if self.registry_cache_path.exists():
+                return json.loads(self.registry_cache_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return {}
+
+    def _write_registry_cache(self, data: dict) -> None:
+        try:
+            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.registry_cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     def _read_cache(self) -> dict:
         try:
