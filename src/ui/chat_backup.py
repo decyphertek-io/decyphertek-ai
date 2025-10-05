@@ -273,18 +273,7 @@ class ChatView:
     
     def _on_docs_click(self, e):
         """Handle docs button click - show troubleshooting notes overlay"""
-        print("[Chat] Docs button clicked!")
-        try:
-            from ui.docs_overlay import create_docs_overlay
-            create_docs_overlay(self.page)
-        except Exception as ex:
-            print(f"[Chat] Error showing docs overlay: {ex}")
-            self.page.show_snack_bar(
-                ft.SnackBar(
-                    content=ft.Text(f"Error opening docs: {ex}"),
-                    bgcolor=ft.colors.RED
-                )
-            )
+        self._show_docs_overlay()
     
     def _on_file_picked(self, e: ft.FilePickerResultEvent):
         """Handle file picker result"""
