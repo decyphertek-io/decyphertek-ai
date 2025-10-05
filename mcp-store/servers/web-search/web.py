@@ -367,6 +367,68 @@ def search_startpage_fallback(query: str, num_results: int = 5) -> List[Dict]:
         return []
 
 
+def search_youtube_videos(query: str, num_results: int = 3) -> List[Dict]:
+    """Search specifically for YouTube videos using multiple methods"""
+    
+    # Add YouTube-specific terms to the query
+    youtube_query = f"{query} site:youtube.com OR site:youtu.be"
+    
+    print(f"[YouTube Search] Searching for videos: {youtube_query}")
+    
+    # Try DuckDuckGo API first for YouTube videos
+    if ddgs_available and check_rate_limit():
+        try:
+            print(f"[YouTube Search] Method 1: Using DuckDuckGo API for YouTube videos")
+            results = list(ddgs.text(youtube_query, max_results=num_results))
+            if results:
+                print(f"[YouTube Search] ✅ DuckDuckGo API found {len(results)} results")
+                # Convert and filter for YouTube videos
+                youtube_results = []
+                for result in results:
+                    url = result.get('href', '')
+                    if 'youtube.com' in url or 'youtu.be' in url:
+                        youtube_id = extract_youtube_id(url)
+                        if youtube_id:
+                            youtube_results.append({
+                                'title': result.get('title', 'No title'),
+                                'url': url,
+                                'snippet': result.get('body', 'No description'),
+                                'youtube_id': youtube_id,
+                                'embed_url': f"https://www.youtube.com/embed/{youtube_id}"
+                            })
+                
+                if youtube_results:
+                    print(f"[YouTube Search] ✅ Found {len(youtube_results)} YouTube videos")
+                    return youtube_results
+        except Exception as e:
+            print(f"[YouTube Search] DuckDuckGo API error: {e}")
+    
+    # Fallback to general search with YouTube filtering
+    print(f"[YouTube Search] Method 2: Using general search with YouTube filtering")
+    general_results = search_with_fallbacks(youtube_query, num_results * 2)  # Get more results to filter
+    
+    youtube_results = []
+    for result in general_results:
+        url = result.get('url', '')
+        if 'youtube.com' in url or 'youtu.be' in url:
+            youtube_id = extract_youtube_id(url)
+            if youtube_id:
+                youtube_results.append({
+                    'title': result.get('title', 'No title'),
+                    'url': url,
+                    'snippet': result.get('snippet', 'No description'),
+                    'youtube_id': youtube_id,
+                    'embed_url': f"https://www.youtube.com/embed/{youtube_id}"
+                })
+    
+    if youtube_results:
+        print(f"[YouTube Search] ✅ Found {len(youtube_results)} YouTube videos via fallback")
+        return youtube_results[:num_results]  # Limit to requested number
+    
+    print(f"[YouTube Search] ❌ No YouTube videos found for: {query}")
+    return []
+
+
 def search_ecosia_fallback(query: str, num_results: int = 5) -> List[Dict]:
     """Fallback search using Ecosia (web scraping)"""
     if is_engine_failing("ecosia"):
@@ -425,7 +487,15 @@ def search_with_fallbacks(query: str, num_results: int = 5) -> List[Dict]:
             results = list(ddgs.text(query, max_results=num_results))
             if results:
                 print(f"[Web Search] ✅ DuckDuckGo API succeeded with {len(results)} results")
-                return results
+                # Convert DuckDuckGo format to standard format
+                formatted_results = []
+                for result in results:
+                    formatted_results.append({
+                        'title': result.get('title', 'No title'),
+                        'url': result.get('href', ''),
+                        'snippet': result.get('body', 'No description')
+                    })
+                return formatted_results
         except Exception as e:
             print(f"[DuckDuckGo API] Error: {e}")
             mark_engine_failed("duckduckgo_api")
@@ -707,32 +777,18 @@ async def handle_video_search(arguments: dict) -> CallToolResult:
     query = arguments.get("query", "")
     num_results = arguments.get("num_results", 3)
     
-    # Add "youtube" to query for better video results
-    video_query = f"{query} site:youtube.com OR site:youtu.be"
-    results = search_with_fallbacks(video_query, num_results)
+    # Use dedicated YouTube search function
+    results = search_youtube_videos(query, num_results)
     
     content_items = []
-    videos_found = []
     
-    for result in results:
-        url = result.get("href", "")
-        youtube_id = extract_youtube_id(url)
-        
-        if youtube_id:
-            title = result.get("title", "No title")
-            videos_found.append({
-                "id": youtube_id,
-                "title": title,
-                "url": url
-            })
-    
-    if videos_found:
+    if results:
         text = "🎬 YOUTUBE VIDEOS FOUND:\n\n"
-        for i, video in enumerate(videos_found, 1):
-            text += f"{i}. {video['title']}\n"
-            text += f"   Video ID: {video['id']}\n"
-            text += f"   URL: {video['url']}\n"
-            text += f"   Embed: https://www.youtube.com/embed/{video['id']}\n\n"
+        for i, video in enumerate(results, 1):
+            text += f"{i}. **{video['title']}**\n"
+            text += f"   📺 {video['url']}\n"
+            text += f"   📝 {video['snippet']}\n"
+            text += f"   🎥 Video ID: {video['youtube_id']}\n\n"
         
         content_items.append(TextContent(type="text", text=text))
     else:
@@ -828,8 +884,8 @@ async def search_videos(query: str, num_results: int = 3):
     if MCP_AVAILABLE:
         return await call_tool("search_videos", {"query": query, "num_results": num_results})
     else:
-        # Standalone mode - call search_with_fallbacks directly
-        return search_with_fallbacks(query, num_results)
+        # Standalone mode - call YouTube search directly
+        return search_youtube_videos(query, num_results)
 
 
 async def search_images(query: str, num_results: int = 5):

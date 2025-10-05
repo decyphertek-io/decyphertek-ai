@@ -295,16 +295,23 @@ class DecypherTekAgent:
             
             # Call the appropriate search function
             if search_type == "videos":
-                # Call the video search function from web.py
-                if hasattr(web_module, 'search_with_fallbacks'):
-                    debug_msg = f"🔍 [DEBUG] Calling search_with_fallbacks for video search: {query}"
+                # Call the YouTube video search function from web.py
+                if hasattr(web_module, 'search_youtube_videos'):
+                    debug_msg = f"🔍 [DEBUG] Calling search_youtube_videos for video search: {query}"
+                    print(debug_msg)
+                    results = web_module.search_youtube_videos(query, num_results)
+                    debug_msg = f"🔍 [DEBUG] YouTube video search completed, got {len(results) if results else 0} results"
+                    print(debug_msg)
+                    return self._format_youtube_results(results, f"YouTube Video Search Results for '{query}'") + f"\n{debug_msg}"
+                elif hasattr(web_module, 'search_with_fallbacks'):
+                    debug_msg = f"🔍 [DEBUG] Fallback: Calling search_with_fallbacks for video search: {query}"
                     print(debug_msg)
                     results = web_module.search_with_fallbacks(query, num_results)
                     debug_msg = f"🔍 [DEBUG] Video search completed, got {len(results) if results else 0} results"
                     print(debug_msg)
                     return self._format_search_results(results, f"Video Search Results for '{query}'") + f"\n{debug_msg}"
                 else:
-                    debug_msg = "🔍 [DEBUG] search_with_fallbacks function not found in web.py module"
+                    debug_msg = "🔍 [DEBUG] No video search functions found in web.py module"
                     print(debug_msg)
                     return f"⚠️ Video search not available in web.py MCP server\n{debug_msg}"
             
@@ -351,6 +358,22 @@ class DecypherTekAgent:
             formatted += f"{i}. **{result.get('title', 'No title')}**\n"
             formatted += f"   {result.get('snippet', 'No description')}\n"
             formatted += f"   🔗 {result.get('url', 'No URL')}\n\n"
+        
+        return formatted
+    
+    def _format_youtube_results(self, results: list, title: str) -> str:
+        """Format YouTube video results with proper URLs for embedding"""
+        if not results:
+            return f"No YouTube videos found for this search."
+        
+        formatted = f"**{title}:**\n\n"
+        for i, result in enumerate(results, 1):
+            formatted += f"{i}. **{result.get('title', 'No title')}**\n"
+            formatted += f"   📺 {result.get('url', 'No URL')}\n"
+            formatted += f"   📝 {result.get('snippet', 'No description')}\n"
+            if result.get('youtube_id'):
+                formatted += f"   🎥 Video ID: {result['youtube_id']}\n"
+            formatted += "\n"
         
         return formatted
     
