@@ -55,6 +55,7 @@ class ChatView:
         self.chat_list = None
         self.input_field = None
         self.send_button = None
+        self.docs_button = None
         self.rag_toggle = None
         self.ollama_toggle = None
         self.use_rag = True  # RAG enabled by default
@@ -102,6 +103,14 @@ class ChatView:
             icon_color=ft.colors.BLUE,
             tooltip="Send message",
             on_click=self._on_send_click
+        )
+        
+        # Docs button (paper icon for troubleshooting notes)
+        self.docs_button = ft.IconButton(
+            icon=ft.icons.DESCRIPTION,
+            icon_color=ft.colors.ORANGE,
+            tooltip="Troubleshooting Notes & Commands",
+            on_click=self._on_docs_click
         )
         
         # Build sidebar
@@ -225,6 +234,8 @@ class ChatView:
                                         tooltip="Upload Document to RAG",
                                         on_click=self._on_upload_click
                                     ),
+                                    # Docs button (paper icon for troubleshooting notes)
+                                    self.docs_button,
                                     self.input_field,
                                     self.send_button
                                 ],
@@ -259,6 +270,10 @@ class ChatView:
             allowed_extensions=["txt", "md", "json", "csv", "py", "js", "html", "css", "xml", "yaml", "yml"],
             allow_multiple=False
         )
+    
+    def _on_docs_click(self, e):
+        """Handle docs button click - show troubleshooting notes overlay"""
+        self._show_docs_overlay()
     
     def _on_file_picked(self, e: ft.FilePickerResultEvent):
         """Handle file picker result"""
@@ -620,6 +635,135 @@ class ChatView:
         dialog.open = True
         self.page.update()
     
+    def _show_docs_overlay(self):
+        """Show troubleshooting notes overlay with read-only commands and editable user notes"""
+        
+        # Read-only troubleshooting commands
+        troubleshooting_notes = """# 🔧 Troubleshooting Commands & Notes
+
+## System Health Checks
+- `health-check` - Comprehensive system health check via adminotaur.py
+- `verbose` - Detailed verbose system status from Chat Manager
+- `!debug` - Debug information from Chat Manager
+
+## Component Status Commands
+- `sudo systemctl status chat_manager` - Chat Manager health check
+- `sudo systemctl status agent` - Agent status report
+- `sudo systemctl status mcp` - MCP servers status report
+- `sudo systemctl status app` - Apps status report
+- `sudo systemctl status agent-adminotaur` - Test adminotaur agent
+- `sudo systemctl status mcp-web-search` - Test web-search MCP server
+
+## MCP Server Management
+- `sudo apt install mcp-web-search` - Install web-search MCP server
+- `sudo apt reinstall mcp-web-search` - Reinstall web-search MCP server
+- `!enable mcp web-search` - Enable web-search MCP server
+- `!disable mcp web-search` - Disable web-search MCP server
+
+## Agent Management
+- `!enable agent adminotaur` - Enable adminotaur agent
+- `!disable agent adminotaur` - Disable adminotaur agent
+- `!list` - List all available components
+
+## Quick Tips
+- All normal chat goes through adminotaur.py when agent is enabled
+- Use `health-check` for comprehensive system diagnostics
+- Use `verbose` for detailed troubleshooting information
+- MCP servers provide tools for the agent (web search, etc.)
+- Store Manager handles downloads and installations
+- Chat Manager routes messages and manages sessions
+
+---
+**Note:** Commands above are read-only. Add your own notes below."""
+
+        # Load user notes from file
+        user_notes_path = Path.home() / ".decyphertek-ai" / "user_notes.txt"
+        user_notes_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        user_notes = ""
+        if user_notes_path.exists():
+            try:
+                user_notes = user_notes_path.read_text(encoding="utf-8")
+            except Exception:
+                user_notes = ""
+        
+        # Create text fields
+        read_only_field = ft.TextField(
+            value=troubleshooting_notes,
+            read_only=True,
+            multiline=True,
+            min_lines=20,
+            max_lines=20,
+            border_color=ft.colors.GREY_300,
+            bgcolor=ft.colors.GREY_50,
+            text_style=ft.TextStyle(
+                font_family="monospace",
+                size=12
+            )
+        )
+        
+        user_notes_field = ft.TextField(
+            value=user_notes,
+            multiline=True,
+            min_lines=10,
+            max_lines=10,
+            hint_text="Add your own troubleshooting notes here...",
+            border_color=ft.colors.BLUE_300,
+            text_style=ft.TextStyle(
+                font_family="monospace",
+                size=12
+            )
+        )
+        
+        def save_notes(e):
+            """Save user notes to file"""
+            try:
+                user_notes_path.write_text(user_notes_field.value, encoding="utf-8")
+                self.page.show_snack_bar(
+                    ft.SnackBar(
+                        content=ft.Text("Notes saved successfully!"),
+                        bgcolor=ft.colors.GREEN
+                    )
+                )
+            except Exception as ex:
+                self.page.show_snack_bar(
+                    ft.SnackBar(
+                        content=ft.Text(f"Error saving notes: {ex}"),
+                        bgcolor=ft.colors.RED
+                    )
+                )
+        
+        def close_dialog(e):
+            self.page.close(dialog)
+        
+        # Create dialog
+        dialog = ft.AlertDialog(
+            title=ft.Text("📋 Troubleshooting Notes & Commands"),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Read-Only Commands:", weight=ft.FontWeight.BOLD),
+                        read_only_field,
+                        ft.Divider(),
+                        ft.Text("Your Notes:", weight=ft.FontWeight.BOLD),
+                        user_notes_field,
+                    ],
+                    scroll=ft.ScrollMode.AUTO,
+                    height=600,
+                    width=800
+                ),
+                padding=10
+            ),
+            actions=[
+                ft.TextButton("Save Notes", on_click=save_notes),
+                ft.TextButton("Close", on_click=close_dialog),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        
+        self.page.add(dialog)
+        self.page.update()
+    
     def _create_model_dropdown(self, provider: str) -> ft.Dropdown:
         """Create model dropdown based on provider"""
         if provider == 'openrouter':
@@ -890,5 +1034,134 @@ class ChatView:
         
         self.page.overlay.append(dialog)
         dialog.open = True
+        self.page.update()
+    
+    def _show_docs_overlay(self):
+        """Show troubleshooting notes overlay with read-only commands and editable user notes"""
+        
+        # Read-only troubleshooting commands
+        troubleshooting_notes = """# 🔧 Troubleshooting Commands & Notes
+
+## System Health Checks
+- `health-check` - Comprehensive system health check via adminotaur.py
+- `verbose` - Detailed verbose system status from Chat Manager
+- `!debug` - Debug information from Chat Manager
+
+## Component Status Commands
+- `sudo systemctl status chat_manager` - Chat Manager health check
+- `sudo systemctl status agent` - Agent status report
+- `sudo systemctl status mcp` - MCP servers status report
+- `sudo systemctl status app` - Apps status report
+- `sudo systemctl status agent-adminotaur` - Test adminotaur agent
+- `sudo systemctl status mcp-web-search` - Test web-search MCP server
+
+## MCP Server Management
+- `sudo apt install mcp-web-search` - Install web-search MCP server
+- `sudo apt reinstall mcp-web-search` - Reinstall web-search MCP server
+- `!enable mcp web-search` - Enable web-search MCP server
+- `!disable mcp web-search` - Disable web-search MCP server
+
+## Agent Management
+- `!enable agent adminotaur` - Enable adminotaur agent
+- `!disable agent adminotaur` - Disable adminotaur agent
+- `!list` - List all available components
+
+## Quick Tips
+- All normal chat goes through adminotaur.py when agent is enabled
+- Use `health-check` for comprehensive system diagnostics
+- Use `verbose` for detailed troubleshooting information
+- MCP servers provide tools for the agent (web search, etc.)
+- Store Manager handles downloads and installations
+- Chat Manager routes messages and manages sessions
+
+---
+**Note:** Commands above are read-only. Add your own notes below."""
+
+        # Load user notes from file
+        user_notes_path = Path.home() / ".decyphertek-ai" / "user_notes.txt"
+        user_notes_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        user_notes = ""
+        if user_notes_path.exists():
+            try:
+                user_notes = user_notes_path.read_text(encoding="utf-8")
+            except Exception:
+                user_notes = ""
+        
+        # Create text fields
+        read_only_field = ft.TextField(
+            value=troubleshooting_notes,
+            read_only=True,
+            multiline=True,
+            min_lines=20,
+            max_lines=20,
+            border_color=ft.colors.GREY_300,
+            bgcolor=ft.colors.GREY_50,
+            text_style=ft.TextStyle(
+                font_family="monospace",
+                size=12
+            )
+        )
+        
+        user_notes_field = ft.TextField(
+            value=user_notes,
+            multiline=True,
+            min_lines=10,
+            max_lines=10,
+            hint_text="Add your own troubleshooting notes here...",
+            border_color=ft.colors.BLUE_300,
+            text_style=ft.TextStyle(
+                font_family="monospace",
+                size=12
+            )
+        )
+        
+        def save_notes(e):
+            """Save user notes to file"""
+            try:
+                user_notes_path.write_text(user_notes_field.value, encoding="utf-8")
+                self.page.show_snack_bar(
+                    ft.SnackBar(
+                        content=ft.Text("Notes saved successfully!"),
+                        bgcolor=ft.colors.GREEN
+                    )
+                )
+            except Exception as ex:
+                self.page.show_snack_bar(
+                    ft.SnackBar(
+                        content=ft.Text(f"Error saving notes: {ex}"),
+                        bgcolor=ft.colors.RED
+                    )
+                )
+        
+        def close_dialog(e):
+            self.page.close(dialog)
+        
+        # Create dialog
+        dialog = ft.AlertDialog(
+            title=ft.Text("📋 Troubleshooting Notes & Commands"),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Read-Only Commands:", weight=ft.FontWeight.BOLD),
+                        read_only_field,
+                        ft.Divider(),
+                        ft.Text("Your Notes:", weight=ft.FontWeight.BOLD),
+                        user_notes_field,
+                    ],
+                    scroll=ft.ScrollMode.AUTO,
+                    height=600,
+                    width=800
+                ),
+                padding=10
+            ),
+            actions=[
+                ft.TextButton("Save Notes", on_click=save_notes),
+                ft.TextButton("Close", on_click=close_dialog),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        
+        self.page.add(dialog)
         self.page.update()
 
