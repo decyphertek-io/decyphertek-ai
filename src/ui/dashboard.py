@@ -75,9 +75,13 @@ class DashboardView:
         self.navigation_bar = None
         self.chat_view = None
         self.rag_view = None
+        self._rag_tab_content = None
         # Store manager (for Agent Store personalities)
         self.store_manager = StoreManager()
         self._agents_init_started = False
+        self._agents_tab_content = None
+        self._mcp_tab_content = None
+        self._apps_tab_content = None
         
         # View mode
         self.showing_api_settings = False
@@ -407,13 +411,16 @@ class DashboardView:
     
     def _build_rag_tab(self) -> ft.Control:
         """Build RAG management tab"""
+        if self._rag_tab_content is not None:
+            return self._rag_tab_content
         if not self.rag_view:
             self.rag_view = RAGView(
                 self.page,
                 self.document_manager,
                 on_install_mcp=self._show_mcp_installer
             )
-        return self.rag_view.build()
+        self._rag_tab_content = self.rag_view.build()
+        return self._rag_tab_content
     
     def _refresh_rag_view(self):
         """Refresh RAG view when documents are uploaded via chat"""
@@ -423,7 +430,10 @@ class DashboardView:
     
     def _build_mcp_tab(self) -> ft.Control:
         """Delegate MCP tab to isolated view."""
-        return MCPStoreView(self.page).build()
+        if self._mcp_tab_content is not None:
+            return self._mcp_tab_content
+        self._mcp_tab_content = MCPStoreView(self.page).build()
+        return self._mcp_tab_content
     
     def _create_mcp_server_card(self, title: str, description: str, icon, color, server_id: str, connected: bool = False):
         """Create an MCP server card with connection status"""
@@ -631,8 +641,11 @@ class DashboardView:
     
     def _build_agents_tab(self) -> ft.Control:
         """Delegate Agents tab to AgentStoreView to avoid blocking and isolate logic."""
+        if self._agents_tab_content is not None:
+            return self._agents_tab_content
         from ui.agent_store import AgentStoreView
-        return AgentStoreView(self.page, self.store_manager).build()
+        self._agents_tab_content = AgentStoreView(self.page, self.store_manager).build()
+        return self._agents_tab_content
 
     def _agents_add_custom_store(self):
         url_field = ft.TextField(
@@ -829,20 +842,17 @@ class DashboardView:
     
     def _build_admin_tab(self) -> ft.Control:
         """Build Apps tab content via app_store view"""
+        if self._apps_tab_content is not None:
+            return self._apps_tab_content
         from ui.app_store import AdminView
-        
-        # Create a simple admin view that fits within the dashboard
-        admin_view = AdminView(self.page, lambda: None)  # No back callback needed
-        
-        # Extract the content from the admin view and wrap it in a container
+        admin_view = AdminView(self.page, lambda: None)
         admin_content = admin_view.build()
-        
-        # Return just the content without the full view structure
-        return ft.Container(
+        self._apps_tab_content = ft.Container(
             content=admin_content.content,
             expand=True,
             padding=0
         )
+        return self._apps_tab_content
     
     def _build_settings_tab(self) -> ft.Control:
         """Build settings tab"""

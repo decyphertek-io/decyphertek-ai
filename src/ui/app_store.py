@@ -1,55 +1,83 @@
 
 import flet as ft
 from pathlib import Path
-import subprocess
-import sys
+import json
+import threading
 from utils.logger import setup_logger
+from agent.store_manager import StoreManager
 
 logger = setup_logger()
 
 
 class AdminView:
-    """Admin panel for launching and managing sub-applications"""
-    
-    def __init__(self, page: ft.Page, on_back=None):
+    """Apps store: download/enable apps from remote registry"""
+
+    def __init__(self, page: ft.Page, on_back=None, store_manager: StoreManager | None = None):
         self.page = page
         self.on_back = on_back
-        self.apps = self._get_available_apps()
-        self.running_apps = {}  # Track running app processes
-        
-    def _get_available_apps(self):
-        """Get list of available Flet applications"""
-        base_path = Path.home() / "Documents" / "git" / "flet"
-        
-        return [
-            {
-                "name": "Ansible Manager",
-                "description": "Infrastructure automation and management",
-                "path": base_path / "ansible" / "src" / "main.py",
-                "icon": ft.icons.SETTINGS_APPLICATIONS,
-                "color": ft.colors.BLUE_400,
-                "enabled": True,
-                "requires_config": True,
-            },
-            {
-                "name": "LangTek",
-                "description": "Language learning and translation tools",
-                "path": base_path / "langtek" / "src" / "main.py",
-                "icon": ft.icons.TRANSLATE,
-                "color": ft.colors.GREEN_400,
-                "enabled": True,
-                "requires_config": False,
-            },
-            {
-                "name": "Netrunner",
-                "description": "Cyberpunk card game",
-                "path": base_path / "netrunner" / "NetRunner-Python" / "main.py",
-                "icon": ft.icons.GAMES,
-                "color": ft.colors.PURPLE_400,
-                "enabled": True,
-                "requires_config": False,
-            },
-        ]
+        self.store = store_manager or StoreManager()
+        self.registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
+        self.cache_path = Path("src/store/app/cache.json")
+        self.local_root = Path("src/store/app")
+        self.apps = self._load_cache()
+        self._ensure_background_sync()
+
+    def _load_cache(self):
+        try:
+            if self.cache_path.exists():
+                data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+                apps = []
+                for aid, info in (data.get("apps") or {}).items():
+                    apps.append(self._normalize_app(aid, info))
+                return apps
+        except Exception as e:
+            logger.error(f"[AppStore] cache load error: {e}")
+        return []
+
+    def _write_cache(self, registry: dict) -> None:
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self.cache_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.error(f"[AppStore] cache write error: {e}")
+
+    def _normalize_app(self, app_id: str, info: dict) -> dict:
+        return {
+            "id": app_id,
+            "name": info.get("name") or app_id,
+            "description": info.get("description") or "",
+            "icon": ft.icons.APPS,
+            "color": ft.colors.BLUE_400,
+            "installed": self.store.is_app_installed(app_id) if hasattr(self.store, "is_app_installed") else False,
+            "enabled": self.store.is_app_enabled(app_id) if hasattr(self.store, "is_app_enabled") else False,
+        }
+
+    def _ensure_background_sync(self):
+        def _bg():
+            try:
+                if hasattr(self.store, "set_app_registry_url"):
+                    self.store.set_app_registry_url(self.registry_url)
+                registry = self.store.fetch_app_registry() if hasattr(self.store, "fetch_app_registry") else {}
+                if registry:
+                    self._write_cache(registry)
+                    new_apps = []
+                    for aid, info in (registry.get("apps") or {}).items():
+                        new_apps.append(self._normalize_app(aid, info))
+                    self.apps = new_apps
+                    self._refresh_view()
+            except Exception as e:
+                logger.error(f"[AppStore] registry sync error: {e}")
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _refresh_view(self):
+        try:
+            if hasattr(self, "_app_list_column") and self._app_list_column is not None:
+                self._app_list_column.controls = [self._build_app_card(app) for app in self.apps]
+                self._app_list_column.update()
+            self.page.update()
+        except Exception:
+            pass
     
     def build(self):
         """Build admin view"""
@@ -88,16 +116,9 @@ class AdminView:
                         bgcolor=ft.colors.SURFACE_VARIANT,
                     ),
                     
-                    # App Grid
+                    # App Grid (renders instantly from cache)
                     ft.Container(
-                        content=ft.Column(
-                            [
-                                self._build_app_card(app)
-                                for app in self.apps
-                            ],
-                            spacing=10,
-                            scroll=ft.ScrollMode.AUTO,
-                        ),
+                        content=self._init_app_list(),
                         padding=20,
                         expand=True,
                     ),
@@ -127,11 +148,18 @@ class AdminView:
             ),
             expand=True,
         )
+
+    def _init_app_list(self) -> ft.Column:
+        # Create and keep a reference so we can update in-place after background sync
+        self._app_list_column = ft.Column(
+            [self._build_app_card(app) for app in self.apps],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        return self._app_list_column
     
     def _build_app_card(self, app):
-        """Build individual app card"""
-        is_running = app["name"] in self.running_apps
-        
+        """Build individual app card (download/enable)"""
         return ft.Card(
             content=ft.Container(
                 content=ft.Column(
@@ -139,19 +167,19 @@ class AdminView:
                         ft.Row(
                             [
                                 ft.Icon(
-                                    name=app["icon"],
-                                    color=app["color"],
+                                    name=app.get("icon", ft.icons.APPS),
+                                    color=app.get("color", ft.colors.BLUE_400),
                                     size=40,
                                 ),
                                 ft.Column(
                                     [
                                         ft.Text(
-                                            app["name"],
+                                            app.get("name") or app.get("id"),
                                             size=18,
                                             weight=ft.FontWeight.BOLD,
                                         ),
                                         ft.Text(
-                                            app["description"],
+                                            app.get("description", ""),
                                             size=12,
                                             color=ft.colors.ON_SURFACE_VARIANT,
                                         ),
@@ -159,38 +187,34 @@ class AdminView:
                                     spacing=2,
                                     expand=True,
                                 ),
-                                ft.Switch(
-                                    value=app["enabled"],
-                                    on_change=lambda e, a=app: self._toggle_app(a, e.control.value),
-                                ),
+                                ft.Row([
+                                    ft.IconButton(
+                                        icon=ft.icons.DOWNLOAD,
+                                        tooltip="Download",
+                                        on_click=lambda _, a=app: self._on_download(a),
+                                        visible=not app.get("installed", False),
+                                    ),
+                                    ft.Switch(
+                                        value=app.get("enabled", False),
+                                        on_change=lambda e, a=app: self._on_toggle_enabled(a, e.control.value),
+                                        visible=app.get("installed", False),
+                                    ),
+                                ], spacing=6),
                             ],
                             alignment=ft.MainAxisAlignment.START,
                         ),
-                        
-                        # Configuration button (only if needed)
-                        ft.Row(
-                            [
-                                ft.IconButton(
-                                    icon=ft.icons.SETTINGS,
-                                    on_click=lambda _, a=app: self._configure_app(a),
-                                    disabled=not app["requires_config"],
-                                    visible=app["requires_config"],
-                                ),
-                            ],
-                            spacing=10,
-                        ),
-                        
+
                         # Status indicator
                         ft.Container(
                             content=ft.Row(
                                 [
                                     ft.Icon(
                                         name=ft.icons.CIRCLE,
-                                        color=ft.colors.GREEN if app["enabled"] else ft.colors.GREY,
+                                        color=ft.colors.GREEN if app.get("enabled", False) else ft.colors.GREY,
                                         size=12,
                                     ),
                                     ft.Text(
-                                        "Enabled" if app["enabled"] else "Disabled",
+                                        "Enabled" if app.get("enabled", False) else "Disabled",
                                         size=12,
                                     ),
                                 ],
@@ -204,94 +228,45 @@ class AdminView:
                 padding=15,
             ),
         )
-    
-    def _launch_app(self, app):
-        """Launch a Flet application as subprocess"""
+
+    def _on_download(self, app: dict):
+        app_id = app.get("id") or app.get("name")
+        if not app_id:
+            return
+        self._show_success(f"Downloading {app_id}...")
+
+        def _bg():
+            try:
+                res = self.store.install_app(app_id) if hasattr(self.store, "install_app") else {"success": False, "error": "installer missing"}
+                if res.get("success"):
+                    for a in self.apps:
+                        if a.get("id") == app_id:
+                            a["installed"] = True
+                            a["enabled"] = a.get("enabled", False)
+                            break
+                    self._show_success(f"Installed {app_id}")
+                else:
+                    self._show_error(f"Install failed: {res.get('error')}")
+            except Exception as e:
+                self._show_error(f"Install error: {e}")
+            finally:
+                self._refresh_view()
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _on_toggle_enabled(self, app: dict, enabled: bool):
+        app_id = app.get("id") or app.get("name")
+        if not app_id:
+            return
         try:
-            if not app["path"].exists():
-                self._show_error(f"App not found: {app['path']}")
-                return
-            
-            logger.info(f"Launching {app['name']}")
-            
-            # Launch app in new window using Poetry
-            process = subprocess.Popen(
-                ["poetry", "run", "python", str(app["path"])],
-                cwd=app["path"].parent.parent,  # Go to project root
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            
-            self.running_apps[app["name"]] = process
-            self._show_success(f"{app['name']} launched successfully")
+            if hasattr(self.store, "set_app_enabled"):
+                self.store.set_app_enabled(app_id, bool(enabled))
+            app["enabled"] = bool(enabled)
             self.page.update()
-            
         except Exception as e:
-            logger.error(f"Failed to launch {app['name']}: {e}")
-            self._show_error(f"Failed to launch: {e}")
+            self._show_error(f"Toggle failed: {e}")
     
-    def _stop_app(self, app):
-        """Stop a running application"""
-        try:
-            if app["name"] in self.running_apps:
-                process = self.running_apps[app["name"]]
-                process.terminate()
-                process.wait(timeout=5)
-                del self.running_apps[app["name"]]
-                
-                logger.info(f"Stopped {app['name']}")
-                self._show_success(f"{app['name']} stopped")
-                self.page.update()
-                
-        except Exception as e:
-            logger.error(f"Failed to stop {app['name']}: {e}")
-            self._show_error(f"Failed to stop: {e}")
-    
-    def _toggle_app(self, app, enabled):
-        """Enable/disable an application"""
-        app["enabled"] = enabled
-        logger.info(f"{app['name']} {'enabled' if enabled else 'disabled'}")
-        self.page.update()
-    
-    def _configure_app(self, app):
-        """Open app configuration dialog"""
-        def close_dialog(e):
-            dialog.open = False
-            self.page.update()
-        
-        dialog = ft.AlertDialog(
-            title=ft.Text(f"Configure {app['name']}"),
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.TextField(
-                            label="API Key",
-                            password=True,
-                            hint_text="Enter API key if required",
-                        ),
-                        ft.TextField(
-                            label="Configuration Path",
-                            value=str(app["path"].parent / "config.json"),
-                        ),
-                        ft.Checkbox(
-                            label="Auto-start on launch",
-                            value=False,
-                        ),
-                    ],
-                    spacing=10,
-                    tight=True,
-                ),
-                width=400,
-            ),
-            actions=[
-                ft.TextButton("Cancel", on_click=close_dialog),
-                ft.TextButton("Save", on_click=close_dialog),
-            ],
-        )
-        
-        self.page.dialog = dialog
-        dialog.open = True
-        self.page.update()
+    # Removed per remote-registry design; configuration handled by apps themselves
     
     def _show_settings(self):
         """Show admin settings dialog"""

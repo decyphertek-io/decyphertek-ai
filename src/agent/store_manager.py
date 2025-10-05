@@ -55,7 +55,7 @@ class StoreManager:
 
         # App store configuration
         self.app_local_root = self.project_root / "src" / "store" / "app"
-        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/apps.json"
+        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
         self.app_registry: Dict[str, Any] = {}
         self.app_enabled_state_path = Path.home() / ".decyphertek-ai" / "app-enabled.json"
         self.app_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.app_enabled_state_path)

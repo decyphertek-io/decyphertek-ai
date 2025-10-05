@@ -40,17 +40,6 @@ class AgentStoreView:
         cache = self._read_cache()
         installed = bool(cache.get(default_id, {}).get("installed", False))
         enabled = bool(cache.get(default_id, {}).get("enabled", False))
-        # Fallback to fast local checks if cache empty
-        if not installed:
-            try:
-                installed = self.store_manager.is_installed(default_id)
-            except Exception:
-                installed = False
-        if not enabled:
-            try:
-                enabled = self.store_manager.is_enabled(default_id)
-            except Exception:
-                enabled = False
 
         def install_default(_):
             if self._is_installing:
@@ -137,19 +126,18 @@ class AgentStoreView:
             padding=10,
         )
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    header,
-                    ft.Container(height=10),
-                    card,
-                    ft.Row([add_store_fab], alignment=ft.MainAxisAlignment.START),
-                ],
+        # Create a persistent container we can update on refresh
+        if not hasattr(self, "_root_content"):
+            self._root_content = ft.Column(
+                [header, ft.Container(height=10), card, ft.Row([add_store_fab], alignment=ft.MainAxisAlignment.START)],
                 expand=True,
                 spacing=10,
-            ),
-            expand=True,
-        )
+            )
+        else:
+            # Update only the dynamic parts
+            self._root_content.controls[2] = card
+
+        return ft.Container(content=self._root_content, expand=True)
 
     def _add_custom_store(self):
         url_field = ft.TextField(
@@ -181,7 +169,42 @@ class AgentStoreView:
         self.page.update()
 
     def _refresh(self):
-        # Rebuild this view in-place immediately
+        # Re-read cache and update dynamic card instantly without blocking
+        default_id = "adminotaur"
+        cache = self._read_cache()
+        installed = bool(cache.get(default_id, {}).get("installed", False))
+        enabled = bool(cache.get(default_id, {}).get("enabled", False))
+
+        if self._is_installing:
+            action = ft.ProgressRing(width=20, height=20)
+        elif installed:
+            action = ft.Switch(value=enabled, on_change=lambda e: self.store_manager.set_enabled(default_id, e.control.value), tooltip="Enable/Disable")
+        else:
+            action = ft.IconButton(icon=ft.icons.DOWNLOAD, tooltip="Install", on_click=lambda e: None)
+
+        # Replace card in-place
+        card = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.icons.SMART_TOY, size=22, color=ft.colors.BLUE),
+                    ft.Column(
+                        [
+                            ft.Text("Adminotaur", size=14, weight=ft.FontWeight.W_600),
+                            ft.Text("Default personality from Agent Store", size=11, color=ft.colors.GREY_600),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    action,
+                ]
+            ),
+            bgcolor=ft.colors.SURFACE_VARIANT,
+            border_radius=8,
+            padding=10,
+        )
+        if hasattr(self, "_root_content") and len(self._root_content.controls) >= 3:
+            self._root_content.controls[2] = card
+            self._root_content.update()
         self.page.update()
 
     # ---------------
