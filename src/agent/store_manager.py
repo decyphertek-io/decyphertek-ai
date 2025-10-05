@@ -46,6 +46,20 @@ class StoreManager:
         self.registry: Dict[str, Any] = {}
         self.enabled_state: Dict[str, bool] = self._load_enabled_state()
 
+        # MCP store configuration
+        self.mcp_local_root = self.project_root / "src" / "store" / "mcp"
+        self.mcp_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.mcp_registry: Dict[str, Any] = {}
+        self.mcp_enabled_state_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
+        self.mcp_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.mcp_enabled_state_path)
+
+        # App store configuration
+        self.app_local_root = self.project_root / "src" / "store" / "app"
+        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/apps.json"
+        self.app_registry: Dict[str, Any] = {}
+        self.app_enabled_state_path = Path.home() / ".decyphertek-ai" / "app-enabled.json"
+        self.app_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.app_enabled_state_path)
+
     # -------------------
     # Registry management
     # -------------------
@@ -241,6 +255,182 @@ class StoreManager:
 
         AgentClass = getattr(module, class_name)
         return AgentClass  # caller may instantiate with its own parameters
+
+    # -----------------
+    # MCP Store methods
+    # -----------------
+    def set_mcp_registry_url(self, url: str) -> None:
+        if url and isinstance(url, str):
+            self.mcp_registry_url = url
+
+    def fetch_mcp_registry(self) -> Dict[str, Any]:
+        try:
+            with urllib.request.urlopen(self.mcp_registry_url, timeout=20) as resp:
+                data = resp.read()
+            reg = json.loads(data.decode("utf-8"))
+            if not isinstance(reg, dict) or "servers" not in reg:
+                raise ValueError("Invalid MCP skills registry")
+            self.mcp_registry = reg
+            return reg
+        except Exception as e:
+            print(f"[StoreManager] MCP registry fetch error: {e}")
+            return {}
+
+    def is_mcp_installed(self, server_id: str) -> bool:
+        dest_dir = self.mcp_local_root / server_id
+        return dest_dir.exists() and any(dest_dir.iterdir())
+
+    def is_mcp_enabled(self, server_id: str) -> bool:
+        return bool(self.mcp_enabled_state.get(server_id, False))
+
+    def set_mcp_enabled(self, server_id: str, enabled: bool) -> None:
+        self.mcp_enabled_state[server_id] = bool(enabled)
+        self._save_enabled_state_generic(self.mcp_enabled_state_path, self.mcp_enabled_state)
+
+    def install_mcp_server(self, server_id: str) -> Dict[str, Any]:
+        if not self.mcp_registry:
+            self.fetch_mcp_registry()
+        info = self.mcp_registry.get("servers", {}).get(server_id)
+        if not info:
+            return {"success": False, "error": f"Unknown server: {server_id}"}
+        repo_url = info.get("repo_url")
+        folder_path = info.get("folder_path")
+        if not repo_url or not folder_path:
+            return {"success": False, "error": "Missing repo_url or folder_path"}
+
+        dest_root = self.mcp_local_root
+        dest_root.mkdir(parents=True, exist_ok=True)
+        dest_dir = dest_root / server_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._download_contents_recursive(repo_url, folder_path, dest_dir)
+            # create venv and install requirements if present
+            venv_dir = dest_dir / ".venv"
+            try:
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                req = dest_dir / "requirements.txt"
+                if req.exists():
+                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+            except Exception as ve:
+                print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
+
+            if info.get("enable_by_default", False):
+                self.set_mcp_enabled(server_id, True)
+            return {"success": True, "message": f"Installed '{server_id}'"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # ------------------
+    # Shared utilities
+    # ------------------
+    def _load_enabled_state_generic(self, path: Path) -> Dict[str, bool]:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return {}
+
+    def _save_enabled_state_generic(self, path: Path, data: Dict[str, bool]) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _contents_api_url(self, repo_url: str, folder_path: str, ref: str = "main") -> str:
+        try:
+            parts = repo_url.rstrip("/").split("/")
+            owner, repo = parts[-2], parts[-1]
+        except Exception:
+            owner, repo = "decyphertek-io", "mcp-store"
+        folder = folder_path.strip("/")
+        return f"https://api.github.com/repos/{owner}/{repo}/contents/{folder}?ref={ref}"
+
+    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        url = self._contents_api_url(repo_url, folder_path, ref)
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            items = json.loads(resp.read().decode("utf-8"))
+        if isinstance(items, dict) and items.get("message"):
+            raise RuntimeError(items.get("message"))
+        for item in items:
+            itype = item.get("type")
+            name = item.get("name")
+            path = item.get("path")
+            download_url = item.get("download_url")
+            if itype == "file" and download_url:
+                target = dest_dir / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with urllib.request.urlopen(download_url, timeout=20) as fsrc, open(target, "wb") as fdst:
+                    fdst.write(fsrc.read())
+            elif itype == "dir":
+                self._download_contents_recursive(repo_url, path, dest_dir / name, ref)
+
+    # ---------------
+    # App Store methods
+    # ---------------
+    def set_app_registry_url(self, url: str) -> None:
+        if url and isinstance(url, str):
+            self.app_registry_url = url
+
+    def fetch_app_registry(self) -> Dict[str, Any]:
+        try:
+            with urllib.request.urlopen(self.app_registry_url, timeout=20) as resp:
+                data = resp.read()
+            reg = json.loads(data.decode("utf-8"))
+            if not isinstance(reg, dict) or "apps" not in reg:
+                raise ValueError("Invalid Apps registry")
+            self.app_registry = reg
+            return reg
+        except Exception as e:
+            print(f"[StoreManager] App registry fetch error: {e}")
+            return {}
+
+    def is_app_installed(self, app_id: str) -> bool:
+        dest_dir = self.app_local_root / app_id
+        return dest_dir.exists() and any(dest_dir.iterdir())
+
+    def is_app_enabled(self, app_id: str) -> bool:
+        return bool(self.app_enabled_state.get(app_id, False))
+
+    def set_app_enabled(self, app_id: str, enabled: bool) -> None:
+        self.app_enabled_state[app_id] = bool(enabled)
+        self._save_enabled_state_generic(self.app_enabled_state_path, self.app_enabled_state)
+
+    def install_app(self, app_id: str) -> Dict[str, Any]:
+        if not self.app_registry:
+            self.fetch_app_registry()
+        info = self.app_registry.get("apps", {}).get(app_id)
+        if not info:
+            return {"success": False, "error": f"Unknown app: {app_id}"}
+        repo_url = info.get("repo_url")
+        folder_path = info.get("folder_path")
+        if not repo_url or not folder_path:
+            return {"success": False, "error": "Missing repo_url or folder_path"}
+
+        dest_root = self.app_local_root
+        dest_root.mkdir(parents=True, exist_ok=True)
+        dest_dir = dest_root / app_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._download_contents_recursive(repo_url, folder_path, dest_dir)
+            venv_dir = dest_dir / ".venv"
+            try:
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                req = dest_dir / "requirements.txt"
+                if req.exists():
+                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+            except Exception as ve:
+                print(f"[StoreManager] App venv/setup error for {app_id}: {ve}")
+            if info.get("enable_by_default", False):
+                self.set_app_enabled(app_id, True)
+            return {"success": True, "message": f"Installed '{app_id}'"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 class DecypherTekAgent:

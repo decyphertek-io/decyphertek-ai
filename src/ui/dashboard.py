@@ -828,8 +828,8 @@ class DashboardView:
         self.page.update()
     
     def _build_admin_tab(self) -> ft.Control:
-        """Build admin tab content"""
-        from ui.admin_view import AdminView
+        """Build Apps tab content via app_store view"""
+        from ui.app_store import AdminView
         
         # Create a simple admin view that fits within the dashboard
         admin_view = AdminView(self.page, lambda: None)  # No back callback needed

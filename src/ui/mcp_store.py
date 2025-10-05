@@ -2,6 +2,9 @@ import flet as ft
 import json
 import threading
 import urllib.request
+import subprocess
+import sys
+import os
 from pathlib import Path
 
 
@@ -167,6 +170,17 @@ class MCPStoreView:
                 folder_path = info.get("folder_path")
                 dest = self.local_root / sid
                 self._download_contents_recursive(repo_url, folder_path, dest)
+                # create venv under server folder and install requirements if present
+                venv_dir = dest / ".venv"
+                try:
+                    # create venv
+                    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                    vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                    req = dest / "requirements.txt"
+                    if req.exists():
+                        subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest), capture_output=True, text=True)
+                except Exception as ve:
+                    print(f"[MCPStore] venv/setup error for {sid}: {ve}")
                 # enable_by_default support
                 if info.get("enable_by_default", False):
                     self._set_enabled(sid, True, write_only=True)
