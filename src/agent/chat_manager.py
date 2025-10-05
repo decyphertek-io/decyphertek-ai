@@ -828,89 +828,59 @@ class ChatManager:
     def _test_mcp_server(self, server_id: str) -> str:
         """Test a specific MCP server to see if it's working."""
         try:
-            # Check if MCP server exists and is enabled
-            if not self.mcp_cache_path.exists():
-                return "❌ No MCP cache found. No MCP servers installed."
+            print(f"[ChatManager] Testing MCP server: {server_id}")
             
-            cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+            # Import and use StoreManager
+            from agent.store_manager import StoreManager
+            store_manager = StoreManager()
             
-            if server_id not in cache_data:
-                return f"❌ MCP server '{server_id}' not found in cache."
+            # Test the server and get detailed feedback
+            result = store_manager.test_mcp_server(server_id)
             
-            server_info = cache_data[server_id]
-            name = server_info.get('name', 'Unknown')
-            installed = server_info.get('installed', False)
-            enabled = server_info.get('enabled', False)
-            
-            if not installed:
-                return f"❌ MCP Server '{server_id}' is not installed."
-            
-            if not enabled:
-                return f"❌ MCP Server '{server_id}' is not enabled. Use '!enable mcp {server_id}' to enable it."
-            
-            print(f"[ChatManager] MCP Server {name} is enabled. Testing with the agent...")
-            
-            # Check if the server script exists
-            server_dir = self.store_root / "mcp" / server_id
-            script_path = server_dir / f"{server_id}.py"
-            
-            if not script_path.exists():
-                return f"**Store Manager:** ❌ **MCP Server script not found**\n\n**Missing file:** {script_path}\n**Status:** Installation incomplete\n💡 **Try reinstalling:** `sudo apt reinstall mcp-{server_id}`"
-            
-            # Test the MCP server by calling it directly
-            test_payload = {
-                "message": "test",
-                "context": "",
-                "history": []
-            }
-            
-            # Set up environment variables
-            env_vars = os.environ.copy()
-            env_vars.update({
-                "PYTHONPATH": str(server_dir),
-                "PATH": os.environ.get("PATH", "")
-            })
-            
-            # Execute MCP server script
-            process = subprocess.run(
-                [sys.executable, str(script_path)],
-                input=json.dumps(test_payload).encode("utf-8"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(server_dir),
-                env=env_vars,
-                timeout=30
-            )
-            
-            if process.returncode != 0:
-                error_output = process.stderr.decode("utf-8", errors="ignore")
-                return f"❌ MCP Server '{server_id}' test failed (code {process.returncode}): {error_output.strip()}"
-            
-            # Parse response
-            output = process.stdout.decode("utf-8", errors="ignore").strip()
-            try:
-                response_data = json.loads(output)
-                if isinstance(response_data, dict):
-                    response_text = response_data.get("text", response_data.get("response", str(response_data)))
+            if result.get("success"):
+                details = result.get("details", {})
+                server_response = details.get("server_response", "No response")
+                name = details.get("name", server_id)
+                script_path = details.get("script_path", "Unknown")
+                enabled = details.get("enabled", False)
+                
+                response = f"**Store Manager:** ✅ **{result.get('message', 'MCP Server is working')}**\n\n"
+                response += f"**Server Response:** {server_response}\n\n"
+                response += f"**Server ID:** {server_id}\n"
+                response += f"**Name:** {name}\n"
+                response += f"**Script Path:** {script_path}\n"
+                response += f"**Enabled:** {'Yes' if enabled else 'No'}\n"
+                response += f"**Status:** {details.get('status', 'Ready for agent use')}"
+                
+                return response
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                details = result.get('details', {})
+                
+                response = f"**Store Manager:** ❌ **{error_msg}**\n\n"
+                
+                if details.get('missing_file'):
+                    response += f"**Missing File:** {details['missing_file']}\n"
+                    response += f"**Status:** {details.get('status', 'Installation incomplete')}\n"
+                    response += f"💡 **Suggestion:** {details.get('suggestion', 'Try reinstalling')}"
+                elif details.get('searched_for'):
+                    response += f"**Searched for:** {', '.join(details['searched_for'])}\n"
+                    response += f"**Available Python files:** {', '.join(details.get('available_py_files', []))}\n"
+                    response += f"**Server Directory:** {details.get('server_dir', 'Unknown')}\n"
+                    response += f"**Status:** {details.get('status', 'Installation incomplete')}\n"
+                    response += f"💡 **Suggestion:** {details.get('suggestion', 'Try reinstalling')}"
+                elif details.get('error_output'):
+                    response += f"**Error Output:** {details['error_output']}\n"
+                    response += f"**Script Path:** {details.get('script_path', 'Unknown')}\n"
+                    response += f"**Enabled:** {'Yes' if details.get('enabled') else 'No'}"
                 else:
-                    response_text = str(response_data)
-            except json.JSONDecodeError:
-                response_text = output
-            
-            # Return success with server response
-            result = f"**Store Manager:** ✅ **MCP Server {name} is enabled and working**\n\n"
-            result += f"**Server Response:** {response_text}\n\n"
-            result += f"**Server ID:** {server_id}\n"
-            result += f"**Script Path:** {script_path}\n"
-            result += f"**Status:** Ready for agent use"
-            
-            return result
-            
-        except subprocess.TimeoutExpired:
-            return f"❌ MCP Server '{server_id}' test timed out (30 seconds)"
+                    response += f"**Details:** {details}"
+                
+                return response
+                
         except Exception as e:
             print(f"[ChatManager] MCP server test error: {e}")
-            return f"❌ MCP Server '{server_id}' test error: {e}"
+            return f"**Store Manager:** ❌ **MCP server test error**\n\n**Error:** {e}"
     
     def _reinstall_mcp_server(self, server_id: str) -> str:
         """Reinstall an MCP server using StoreManager."""
@@ -921,28 +891,36 @@ class ChatManager:
             from agent.store_manager import StoreManager
             store_manager = StoreManager()
             
-            # Check if server exists in registry first
-            if not store_manager.mcp_registry:
-                store_manager.fetch_mcp_registry()
-            
-            servers = store_manager.mcp_registry.get("servers", {})
-            if server_id not in servers:
-                return f"**Store Manager:** ❌ **MCP Server '{server_id}' not found in registry**\n\n**Available servers:** {', '.join(servers.keys())}"
-            
-            # Perform reinstall
+            # Perform reinstall and get detailed feedback
             result = store_manager.reinstall_mcp_server(server_id)
             
             if result.get("success"):
-                # Check what was actually installed
-                server_dir = store_manager.mcp_store_root / server_id
-                installed_files = []
-                if server_dir.exists():
-                    installed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
+                details = result.get("details", {})
+                removed_files = details.get("removed_files", [])
+                installed_files = details.get("installed_files", [])
+                script_path = details.get("script_path", "Unknown")
                 
-                return f"**Store Manager:** ✅ **MCP Server '{server_id}' reinstalled successfully**\n\n**Status:** Ready for use\n**Installed files:** {', '.join(installed_files) if installed_files else 'None detected'}\n**Next:** Run `sudo systemctl status mcp-{server_id}` to test"
+                response = f"**Store Manager:** ✅ **{result.get('message', 'MCP Server reinstalled successfully')}**\n\n"
+                response += f"**Status:** {details.get('status', 'Ready for use')}\n"
+                response += f"**Script Path:** {script_path}\n"
+                
+                if removed_files:
+                    response += f"**Removed Files:** {', '.join(removed_files)}\n"
+                if installed_files:
+                    response += f"**Installed Files:** {', '.join(installed_files)}\n"
+                
+                response += f"\n**Next:** Run `sudo systemctl status mcp-{server_id}` to test"
+                return response
             else:
                 error_msg = result.get('error', 'Unknown error')
-                return f"**Store Manager:** ❌ **Failed to reinstall MCP server '{server_id}'**\n\n**Error:** {error_msg}\n**Troubleshooting:** Check network connection and registry access"
+                details = result.get('details', '')
+                
+                response = f"**Store Manager:** ❌ **Failed to reinstall MCP server '{server_id}'**\n\n"
+                response += f"**Error:** {error_msg}\n"
+                if details:
+                    response += f"**Details:** {details}\n"
+                response += "**Troubleshooting:** Check network connection and registry access"
+                return response
                 
         except Exception as e:
             print(f"[ChatManager] MCP server reinstall error: {e}")
@@ -1015,9 +993,10 @@ class ChatManager:
             if not agent_info or agent_info.get("id") != "adminotaur":
                 return "❌ Adminotaur agent not found or not enabled. Use '!enable agent adminotaur' to enable it."
             
-            # Check if agent files exist
-            agent_dir = self.store_root / "agent" / "adminotaur"
-            script_path = agent_dir / "adminotaur.py"
+            # Check if agent files exist (agnostic to agent name)
+            agent_id = agent_info.get("id", "adminotaur")
+            agent_dir = self.store_root / "agent" / agent_id
+            script_path = agent_dir / f"{agent_id}.py"
             
             if not script_path.exists():
                 return "❌ Adminotaur script not found. Agent may not be properly installed."
@@ -1025,7 +1004,7 @@ class ChatManager:
             print(f"[ChatManager] Adminotaur Agent is installed & enabled. Calling adminotaur agent now...")
             
             # Call the agent with the user message
-            return self.invoke_agent("adminotaur", user_message, [], "")
+            return self.invoke_agent(agent_id, user_message, [], "")
             
         except Exception as e:
             print(f"[ChatManager] Error calling adminotaur agent: {e}")
@@ -1041,9 +1020,10 @@ class ChatManager:
             if not agent_info or agent_info.get("id") != "adminotaur":
                 return "❌ Adminotaur agent not found or not enabled. Use '!enable agent adminotaur' to enable it."
             
-            # Check if agent files exist
-            agent_dir = self.store_root / "agent" / "adminotaur"
-            script_path = agent_dir / "adminotaur.py"
+            # Check if agent files exist (agnostic to agent name)
+            agent_id = agent_info.get("id", "adminotaur")
+            agent_dir = self.store_root / "agent" / agent_id
+            script_path = agent_dir / f"{agent_id}.py"
             
             print(f"[ChatManager] Checking agent path: {script_path}")
             print(f"[ChatManager] Path exists: {script_path.exists()}")
@@ -1211,7 +1191,9 @@ class ChatManager:
             try:
                 import sys
                 sys.path.insert(0, str(agent_dir))
-                import adminotaur
+                # Dynamically import the agent script (agnostic to agent name)
+                agent_script_name = agent_dir.name  # e.g., "adminotaur"
+                agent_module = __import__(agent_script_name)
                 info_lines.append("   ✅ Agent script imports successfully")
             except Exception as e:
                 info_lines.append(f"   ❌ Import failed: {e}")

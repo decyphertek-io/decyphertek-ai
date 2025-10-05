@@ -295,17 +295,78 @@ class StoreManager:
     def reinstall_mcp_server(self, server_id: str) -> Dict[str, Any]:
         """Reinstall an MCP server (useful for fixing broken installations)."""
         try:
+            # Check if server exists in registry first
+            if not self.mcp_registry:
+                self.fetch_mcp_registry()
+            
+            servers = self.mcp_registry.get("servers", {})
+            if server_id not in servers:
+                available_servers = list(servers.keys())
+                return {
+                    "success": False, 
+                    "error": f"MCP Server '{server_id}' not found in registry",
+                    "details": f"Available servers: {', '.join(available_servers) if available_servers else 'None'}"
+                }
+            
             # Remove existing installation
             server_dir = self.mcp_store_root / server_id
+            removed_files = []
             if server_dir.exists():
                 import shutil
+                # List files before removal for feedback
+                removed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
                 shutil.rmtree(server_dir)
                 print(f"[StoreManager] Removed existing {server_id} installation")
             
             # Reinstall
-            return self.install_mcp_server(server_id)
+            install_result = self.install_mcp_server(server_id)
+            
+            if install_result.get("success"):
+                # Check what was actually installed
+                installed_files = []
+                if server_dir.exists():
+                    installed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
+                
+                # Find the actual script file for feedback
+                script_path = None
+                possible_names = [
+                    f"{server_id}.py",  # web-search.py
+                    "main.py",          # main.py
+                    "web.py",           # web.py (for web-search)
+                    "server.py",        # server.py
+                    "app.py"            # app.py
+                ]
+                
+                for script_name in possible_names:
+                    potential_path = server_dir / script_name
+                    if potential_path.exists():
+                        script_path = potential_path
+                        break
+                
+                return {
+                    "success": True,
+                    "message": f"MCP Server '{server_id}' reinstalled successfully",
+                    "details": {
+                        "removed_files": removed_files,
+                        "installed_files": installed_files,
+                        "server_id": server_id,
+                        "script_path": str(script_path) if script_path else "Script not found",
+                        "status": "Ready for use"
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": install_result.get("error", "Unknown installation error"),
+                    "details": f"Failed to reinstall MCP server '{server_id}'"
+                }
+                
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False, 
+                "error": str(e),
+                "details": f"Exception during reinstall of MCP server '{server_id}'"
+            }
 
     def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
         url = self._contents_api_url(repo_url, folder_path, ref)
@@ -467,20 +528,53 @@ class StoreManager:
         dest_dir.mkdir(parents=True, exist_ok=True)
         try:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
+            
+            # Check what files were downloaded
+            downloaded_files = [f.name for f in dest_dir.iterdir() if f.is_file()]
+            
             # create venv and install requirements if present
             venv_dir = dest_dir / ".venv"
+            requirements_installed = False
             try:
                 subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                 req = dest_dir / "requirements.txt"
                 if req.exists():
-                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    result = subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    requirements_installed = result.returncode == 0
             except Exception as ve:
                 print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
 
             if info.get("enable_by_default", False):
                 self.set_mcp_enabled(server_id, True)
-            return {"success": True, "message": f"Installed '{server_id}'"}
+            
+            # Find the actual script file for feedback
+            script_path = None
+            possible_names = [
+                f"{server_id}.py",  # web-search.py
+                "main.py",          # main.py
+                "web.py",           # web.py (for web-search)
+                "server.py",        # server.py
+                "app.py"            # app.py
+            ]
+            
+            for script_name in possible_names:
+                potential_path = dest_dir / script_name
+                if potential_path.exists():
+                    script_path = potential_path
+                    break
+            
+            return {
+                "success": True, 
+                "message": f"Installed '{server_id}'",
+                "details": {
+                    "downloaded_files": downloaded_files,
+                    "requirements_installed": requirements_installed,
+                    "server_id": server_id,
+                    "script_path": str(script_path) if script_path else "Script not found",
+                    "enabled_by_default": info.get("enable_by_default", False)
+                }
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -525,6 +619,130 @@ class StoreManager:
             cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass
+
+    def test_mcp_server(self, server_id: str) -> Dict[str, Any]:
+        """Test an MCP server and return detailed status information."""
+        try:
+            # Check if server is installed
+            server_dir = self.mcp_store_root / server_id
+            
+            # Find the actual script file (could be {server_id}.py, main.py, or other names)
+            script_path = None
+            possible_names = [
+                f"{server_id}.py",  # web-search.py
+                "main.py",          # main.py
+                "web.py",           # web.py (for web-search)
+                "server.py",        # server.py
+                "app.py"            # app.py
+            ]
+            
+            for script_name in possible_names:
+                potential_path = server_dir / script_name
+                if potential_path.exists():
+                    script_path = potential_path
+                    break
+            
+            if not script_path:
+                # List available files for debugging
+                available_files = [f.name for f in server_dir.iterdir() if f.is_file() and f.suffix == '.py']
+                return {
+                    "success": False,
+                    "error": f"MCP Server script not found",
+                    "details": {
+                        "searched_for": possible_names,
+                        "available_py_files": available_files,
+                        "server_dir": str(server_dir),
+                        "status": "Installation incomplete",
+                        "suggestion": f"Run: sudo apt reinstall mcp-{server_id}"
+                    }
+                }
+            
+            # Check if server is enabled
+            is_enabled = self.is_mcp_enabled(server_id)
+            
+            # Get server info from registry
+            server_info = {}
+            if self.mcp_registry:
+                server_info = self.mcp_registry.get("servers", {}).get(server_id, {})
+            
+            # Test the server by calling it
+            test_payload = {
+                "message": "test",
+                "context": "",
+                "history": []
+            }
+            
+            env_vars = os.environ.copy()
+            env_vars.update({
+                "PYTHONPATH": str(server_dir),
+                "PATH": os.environ.get("PATH", "")
+            })
+            
+            process = subprocess.run(
+                [sys.executable, str(script_path)],
+                input=json.dumps(test_payload).encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(server_dir),
+                env=env_vars,
+                timeout=30
+            )
+            
+            if process.returncode != 0:
+                error_output = process.stderr.decode("utf-8", errors="ignore")
+                return {
+                    "success": False,
+                    "error": f"MCP Server test failed (code {process.returncode})",
+                    "details": {
+                        "error_output": error_output.strip(),
+                        "server_id": server_id,
+                        "script_path": str(script_path),
+                        "enabled": is_enabled
+                    }
+                }
+            
+            # Parse response
+            output = process.stdout.decode("utf-8", errors="ignore").strip()
+            try:
+                response_data = json.loads(output)
+                if isinstance(response_data, dict):
+                    response_text = response_data.get("text", response_data.get("response", str(response_data)))
+                else:
+                    response_text = str(response_data)
+            except json.JSONDecodeError:
+                response_text = output
+            
+            return {
+                "success": True,
+                "message": f"MCP Server {server_id} is working",
+                "details": {
+                    "server_response": response_text,
+                    "server_id": server_id,
+                    "script_path": str(script_path),
+                    "enabled": is_enabled,
+                    "name": server_info.get("name", server_id),
+                    "status": "Ready for agent use"
+                }
+            }
+            
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": f"MCP Server '{server_id}' test timed out (30 seconds)",
+                "details": {
+                    "server_id": server_id,
+                    "timeout": "30 seconds"
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"MCP Server test error: {e}",
+                "details": {
+                    "server_id": server_id,
+                    "exception": str(e)
+                }
+            }
 
     # ------------------
     # Shared utilities
