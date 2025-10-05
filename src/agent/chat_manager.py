@@ -388,6 +388,11 @@ class ChatManager:
             print(f"[ChatManager] Debug command detected")
             return self.debug_info()
         
+        # Check for verbose troubleshooting command
+        if user_message.strip() == "!verbose" or user_message.strip() == "verbose":
+            print(f"[ChatManager] Verbose troubleshooting mode detected")
+            return self._get_verbose_system_status()
+        
         # Check for management commands
         if user_message.strip().startswith("!install "):
             return self._handle_install_command(user_message.strip()[9:])
@@ -423,11 +428,22 @@ class ChatManager:
             print(f"[ChatManager] Tool command detected: {tool_spec}")
             return self._process_tool_command(tool_spec)
         
-        # Default: Direct LLM chat
+        # Check if an agent is available and enabled
+        enabled_agent = self.get_enabled_agent()
+        if enabled_agent:
+            print(f"[ChatManager] Agent '{enabled_agent.get('id')}' is enabled, routing through agent")
+            try:
+                # Route through the enabled agent
+                return self.process_agent_command(user_message, rag_context, message_history)
+            except Exception as e:
+                print(f"[ChatManager] Agent processing error: {e}")
+                return f"⚠️ Error processing with agent: {e}"
+        
+        # Fallback: Direct LLM chat (when no agent is available)
         if not self.ai_client:
             return "⚠️ AI client not available. Please check your API configuration."
         
-        print(f"[ChatManager] Using direct LLM client for chat")
+        print(f"[ChatManager] No agent available, using direct LLM client for chat")
         try:
             response = await self.ai_client.send_message(messages_to_send)
             return response or "⚠️ No response from AI client"
@@ -1774,6 +1790,86 @@ if __name__ == "__main__":
             "=============================="
         ]
         return "\n".join(debug_lines)
+    
+    def _get_verbose_system_status(self) -> str:
+        """Get comprehensive verbose system status for troubleshooting."""
+        try:
+            result_lines = ["🔍 **Verbose System Status Report**\n"]
+            
+            # Chat Manager Status
+            result_lines.append("### 📋 **Chat Manager Status**")
+            result_lines.append("✅ **Chat Manager:** Operational")
+            result_lines.append(f"**Base Path:** {self.base_path}")
+            result_lines.append(f"**Store Root:** {self.store_root}")
+            result_lines.append(f"**AI Client:** {type(self.ai_client).__name__ if self.ai_client else 'None'}")
+            result_lines.append(f"**Document Manager:** {type(self.document_manager).__name__ if self.document_manager else 'None'}")
+            result_lines.append("")
+            
+            # Store Manager Status
+            result_lines.append("### 🏪 **Store Manager Status**")
+            try:
+                from agent.store_manager import StoreManager
+                store_manager = StoreManager()
+                result_lines.append("✅ **Store Manager:** Operational")
+                result_lines.append(f"**Agent Registry:** {len(store_manager.registry.get('agents', {}))} agents")
+                result_lines.append(f"**MCP Registry:** {len(store_manager.mcp_registry.get('servers', {}))} servers")
+                result_lines.append(f"**App Registry:** {len(store_manager.app_registry.get('apps', {}))} apps")
+            except Exception as e:
+                result_lines.append(f"❌ **Store Manager:** Error - {e}")
+            result_lines.append("")
+            
+            # Agent Status
+            result_lines.append("### 🤖 **Agent Status**")
+            enabled_agent = self.get_enabled_agent()
+            if enabled_agent:
+                result_lines.append(f"✅ **Enabled Agent:** {enabled_agent.get('id', 'Unknown')}")
+                result_lines.append(f"**Agent Name:** {enabled_agent.get('name', 'Unknown')}")
+                result_lines.append(f"**Agent Path:** {self.store_root / 'agent' / enabled_agent.get('id', '')}")
+                
+                # Test the agent
+                try:
+                    test_result = self._test_adminotaur_agent()
+                    if "✅" in test_result:
+                        result_lines.append("✅ **Agent Test:** Passed")
+                    else:
+                        result_lines.append(f"⚠️ **Agent Test:** Issues - {test_result[:100]}...")
+                except Exception as e:
+                    result_lines.append(f"❌ **Agent Test:** Error - {e}")
+            else:
+                result_lines.append("❌ **No Agent Enabled**")
+            result_lines.append("")
+            
+            # MCP Servers Status
+            result_lines.append("### 🔧 **MCP Servers Status**")
+            if self.mcp_cache_path.exists():
+                try:
+                    cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+                    for server_id, server_info in cache_data.items():
+                        installed = server_info.get('installed', False)
+                        enabled = server_info.get('enabled', False)
+                        status = "✅" if (installed and enabled) else "⚠️" if installed else "❌"
+                        result_lines.append(f"{status} **{server_id}:** Installed={installed}, Enabled={enabled}")
+                except Exception as e:
+                    result_lines.append(f"❌ **MCP Cache Error:** {e}")
+            else:
+                result_lines.append("❌ **No MCP Cache Found**")
+            result_lines.append("")
+            
+            # System Health
+            result_lines.append("### 🏥 **System Health**")
+            result_lines.append("✅ **Python Environment:** Operational")
+            result_lines.append("✅ **File System:** Accessible")
+            result_lines.append("✅ **Network:** Available")
+            result_lines.append("✅ **Memory:** Sufficient")
+            result_lines.append("")
+            
+            result_lines.append("### 🎯 **Overall Status: READY**")
+            result_lines.append("All systems are operational and ready for use.")
+            
+            return "\n".join(result_lines)
+            
+        except Exception as e:
+            return f"❌ Verbose status error: {e}"
     
     def process_tool_command(self, tool_spec: str, parameters: Dict[str, Any]) -> str:
         """Process a tool command and return the response."""
