@@ -123,8 +123,7 @@ qdrant/
 *.qdrant
 
 # App runtime storage (agent/mcp/app downloads)
-#store/
-#src/store/
+src/store/
 
 # Node modules (if any)
 node_modules/
