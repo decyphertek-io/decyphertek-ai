@@ -40,23 +40,19 @@ class StoreManager:
         self.project_root = Path(__file__).resolve().parents[2]
         # Store layout: ./src/store/agent/<personality>
         self.local_store_root = self.project_root / "src" / "store" / "agent"
+        self.mcp_store_root = self.project_root / "src" / "store" / "mcp"
         self.enabled_state_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
+        self.mcp_enabled_state_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
 
         self.registry_url = (
             registry_url
             or "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/personality.json"
         )
-        self.registry: Dict[str, Any] = {}
-        self.enabled_state: Dict[str, bool] = self._load_enabled_state()
-
-        # MCP store configuration
-        self.mcp_local_root = self.project_root / "src" / "store" / "mcp"
         self.mcp_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.registry: Dict[str, Any] = {}
         self.mcp_registry: Dict[str, Any] = {}
-        self.mcp_enabled_state_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
-        self.mcp_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.mcp_enabled_state_path)
-        # Kick off background sync to auto-install defaults and refresh cache
-        self._start_mcp_background_sync()
+        self.enabled_state: Dict[str, bool] = self._load_enabled_state()
+        self.mcp_enabled_state: Dict[str, bool] = self._load_mcp_enabled_state()
 
         # App store configuration
         self.app_local_root = self.project_root / "src" / "store" / "app"
@@ -81,6 +77,20 @@ class StoreManager:
             print(f"[StoreManager] Registry fetch error: {e}")
             # Attempt local fallback
             local_json = self.local_store_root / "personality.json"
+    
+    def fetch_mcp_registry(self) -> Dict[str, Any]:
+        try:
+            with urllib.request.urlopen(self.mcp_registry_url, timeout=20) as resp:
+                data = resp.read()
+            reg = json.loads(data.decode("utf-8"))
+            if not isinstance(reg, dict) or "servers" not in reg:
+                raise ValueError("Invalid MCP registry")
+            self.mcp_registry = reg
+            return reg
+        except Exception as e:
+            print(f"[StoreManager] MCP registry fetch error: {e}")
+            # Attempt local fallback
+            local_json = self.mcp_store_root / "skills.json"
             if local_json.exists():
                 try:
                     self.registry = json.loads(local_json.read_text(encoding="utf-8"))
@@ -194,6 +204,108 @@ class StoreManager:
             return {"success": True, "message": f"Installed '{agent_id}'"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+    
+    def install_mcp_server(self, server_id: str) -> Dict[str, Any]:
+        """Install an MCP server from the registry."""
+        if not self.mcp_registry:
+            self.fetch_mcp_registry()
+        
+        servers = self.mcp_registry.get("servers", {})
+        info = servers.get(server_id)
+        if not info:
+            return {"success": False, "error": f"Unknown MCP server: {server_id}"}
+
+        repo_url = info.get("repo_url", "https://github.com/decyphertek-io/mcp-store")
+        folder_path = info.get("folder_path", f"servers/{server_id}/")
+        contents_url = self._contents_api_url(repo_url, folder_path)
+        
+        # Install under ./store/mcp
+        dest_root = self.mcp_store_root
+        dest_root.mkdir(parents=True, exist_ok=True)
+        dest_dir = dest_root / server_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # List directory items via GitHub Contents API
+            with urllib.request.urlopen(contents_url, timeout=20) as resp:
+                listing = json.loads(resp.read().decode("utf-8"))
+            if isinstance(listing, dict) and listing.get("message"):
+                raise RuntimeError(listing.get("message"))
+            self._download_contents_recursive(repo_url, folder_path, dest_dir)
+
+            # Create local venv and install requirements if present
+            venv_dir = dest_dir / ".venv"
+            try:
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                req = dest_dir / "requirements.txt"
+                if req.exists():
+                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+            except Exception as ve:
+                print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
+
+            # Mark installed in local cache
+            self._write_mcp_cache_entry(server_id, installed=True)
+
+            # Enable by default if specified
+            if info.get("enable_by_default", False):
+                self.set_mcp_enabled(server_id, True)
+
+            return {"success": True, "message": f"Installed MCP server '{server_id}'"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def set_mcp_enabled(self, server_id: str, enabled: bool) -> None:
+        """Set MCP server enabled state."""
+        self.mcp_enabled_state[server_id] = enabled
+        self._save_mcp_enabled_state()
+    
+    def is_mcp_enabled(self, server_id: str) -> bool:
+        """Check if MCP server is enabled."""
+        return self.mcp_enabled_state.get(server_id, False)
+    
+    def _save_mcp_enabled_state(self) -> None:
+        try:
+            self.mcp_enabled_state_path.parent.mkdir(parents=True, exist_ok=True)
+            self.mcp_enabled_state_path.write_text(json.dumps(self.mcp_enabled_state, indent=2), encoding="utf-8")
+        except Exception as e:
+            print(f"[StoreManager] MCP enabled state save error: {e}")
+    
+    def _write_mcp_cache_entry(self, server_id: str, installed: bool = None, enabled: bool = None) -> None:
+        """Write MCP cache entry."""
+        try:
+            cache_path = self.mcp_store_root / "cache.json"
+            if cache_path.exists():
+                cache_data = json.loads(cache_path.read_text(encoding="utf-8"))
+            else:
+                cache_data = {}
+            
+            if server_id not in cache_data:
+                cache_data[server_id] = {}
+            
+            if installed is not None:
+                cache_data[server_id]["installed"] = installed
+            if enabled is not None:
+                cache_data[server_id]["enabled"] = enabled
+            
+            cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+        except Exception as e:
+            print(f"[StoreManager] MCP cache write error: {e}")
+    
+    def reinstall_mcp_server(self, server_id: str) -> Dict[str, Any]:
+        """Reinstall an MCP server (useful for fixing broken installations)."""
+        try:
+            # Remove existing installation
+            server_dir = self.mcp_store_root / server_id
+            if server_dir.exists():
+                import shutil
+                shutil.rmtree(server_dir)
+                print(f"[StoreManager] Removed existing {server_id} installation")
+            
+            # Reinstall
+            return self.install_mcp_server(server_id)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
         url = self._contents_api_url(repo_url, folder_path, ref)
@@ -230,6 +342,15 @@ class StoreManager:
                 return json.loads(self.enabled_state_path.read_text(encoding="utf-8"))
         except Exception as e:
             print(f"[StoreManager] Enabled state load error: {e}")
+        return {}
+    
+    def _load_mcp_enabled_state(self) -> Dict[str, bool]:
+        try:
+            self.mcp_enabled_state_path.parent.mkdir(parents=True, exist_ok=True)
+            if self.mcp_enabled_state_path.exists():
+                return json.loads(self.mcp_enabled_state_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[StoreManager] MCP enabled state load error: {e}")
         return {}
 
     def _save_enabled_state(self) -> None:
@@ -319,7 +440,7 @@ class StoreManager:
             return {}
 
     def is_mcp_installed(self, server_id: str) -> bool:
-        dest_dir = self.mcp_local_root / server_id
+        dest_dir = self.mcp_store_root / server_id
         return dest_dir.exists() and any(dest_dir.iterdir())
 
     def is_mcp_enabled(self, server_id: str) -> bool:
@@ -340,7 +461,7 @@ class StoreManager:
         if not repo_url or not folder_path:
             return {"success": False, "error": "Missing repo_url or folder_path"}
 
-        dest_root = self.mcp_local_root
+        dest_root = self.mcp_store_root
         dest_root.mkdir(parents=True, exist_ok=True)
         dest_dir = dest_root / server_id
         dest_dir.mkdir(parents=True, exist_ok=True)

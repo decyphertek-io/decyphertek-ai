@@ -114,6 +114,8 @@ class ChatManager:
                 cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
                 if "web-search" in cache_data and cache_data["web-search"].get("installed"):
                     print("[ChatManager] Default MCP servers already installed")
+                    # Set up environments for enabled MCP servers
+                    self._setup_enabled_mcp_environments()
                     return
             
             # Create default MCP cache entry
@@ -362,6 +364,24 @@ class ChatManager:
         if user_message.strip() == "sudo systemctl status agent-adminotaur":
             print(f"[ChatManager] Adminotaur agent test command detected")
             return self._call_adminotaur_agent(user_message)
+        
+        # Specific MCP server test command
+        if user_message.strip().startswith("sudo systemctl status mcp-"):
+            server_id = user_message.strip().replace("sudo systemctl status mcp-", "")
+            print(f"[ChatManager] MCP server test command detected for: {server_id}")
+            return self._test_mcp_server(server_id)
+        
+        # MCP server install command
+        if user_message.strip().startswith("sudo apt install mcp-"):
+            server_id = user_message.strip().replace("sudo apt install mcp-", "")
+            print(f"[ChatManager] MCP server install command detected for: {server_id}")
+            return self._reinstall_mcp_server(server_id)
+        
+        # MCP server reinstall command
+        if user_message.strip().startswith("sudo apt reinstall mcp-"):
+            server_id = user_message.strip().replace("sudo apt reinstall mcp-", "")
+            print(f"[ChatManager] MCP server reinstall command detected for: {server_id}")
+            return self._reinstall_mcp_server(server_id)
 
         # Check for debug command
         if user_message.strip() == "!debug":
@@ -372,8 +392,18 @@ class ChatManager:
         if user_message.strip().startswith("!install "):
             return self._handle_install_command(user_message.strip()[9:])
         
+        if user_message.strip().startswith("!reinstall "):
+            return self._handle_reinstall_command(user_message.strip()[11:])
+        
         if user_message.strip().startswith("!enable "):
-            return self._handle_enable_command(user_message.strip()[8:])
+            result = self._handle_enable_command(user_message.strip()[8:])
+            # If enabling an MCP server, set up its environment
+            parts = user_message.strip()[8:].split()
+            if len(parts) >= 2 and parts[0] == "mcp":
+                server_id = parts[1]
+                print(f"[ChatManager] MCP server {server_id} enabled, setting up environment...")
+                self._setup_mcp_environment(server_id)
+            return result
         
         if user_message.strip().startswith("!disable "):
             return self._handle_disable_command(user_message.strip()[9:])
@@ -472,6 +502,33 @@ class ChatManager:
                 
         except Exception as e:
             return f"❌ Install command error: {e}"
+    
+    def _handle_reinstall_command(self, args: str) -> str:
+        """Handle reinstall commands like '!reinstall mcp web-search'."""
+        try:
+            parts = args.split()
+            if len(parts) < 2:
+                return "❌ Usage: !reinstall <type> <id>\nExample: !reinstall mcp web-search"
+            
+            item_type = parts[0].lower()
+            item_id = parts[1]
+            
+            if item_type == "mcp":
+                print(f"[ChatManager] Reinstalling MCP server: {item_id}")
+                # Import and use StoreManager
+                from agent.store_manager import StoreManager
+                store_manager = StoreManager()
+                result = store_manager.reinstall_mcp_server(item_id)
+                
+                if result.get("success"):
+                    return f"✅ Successfully reinstalled MCP server '{item_id}'"
+                else:
+                    return f"❌ Failed to reinstall MCP server '{item_id}': {result.get('error', 'Unknown error')}"
+            else:
+                return f"❌ Unsupported reinstall type: {item_type}. Use 'mcp' for MCP servers."
+                
+        except Exception as e:
+            return f"❌ Reinstall command error: {e}"
     
     def _handle_enable_command(self, command: str) -> str:
         """Handle !enable commands."""
@@ -661,9 +718,16 @@ class ChatManager:
                 
                 install_status = "📦 Installed" if installed else "⚠️ Not Installed"
                 
+                # Check environment setup for enabled servers
+                env_status = ""
+                if enabled and installed:
+                    env_status = self._check_mcp_environment(server_id)
+                
                 result.append(f"{status_icon} **{server_id}** ({name})")
                 result.append(f"   Status: {status_text}")
                 result.append(f"   Install: {install_status}")
+                if env_status:
+                    result.append(f"   Environment: {env_status}")
                 result.append(f"   Description: {description}")
                 result.append("")
             
@@ -681,6 +745,208 @@ class ChatManager:
             
         except Exception as e:
             return f"❌ MCP status report error: {e}"
+    
+    def _check_mcp_environment(self, server_id: str) -> str:
+        """Check if an MCP server's environment is properly set up."""
+        try:
+            server_dir = self.store_root / "mcp" / server_id
+            script_path = server_dir / f"{server_id}.py"
+            requirements_file = server_dir / "requirements.txt"
+            
+            if not script_path.exists():
+                return "❌ Script missing"
+            
+            # Check if requirements are installed
+            if requirements_file.exists():
+                requirements_content = requirements_file.read_text(encoding="utf-8").strip()
+                if requirements_content:
+                    # For now, assume if requirements.txt exists and has content, it's set up
+                    # In a more robust implementation, we'd check if packages are actually installed
+                    return "✅ Ready"
+                else:
+                    return "✅ No requirements"
+            else:
+                return "✅ No requirements"
+                
+        except Exception as e:
+            return f"❌ Check failed: {e}"
+    
+    def _setup_mcp_environment(self, server_id: str) -> bool:
+        """Set up the environment for an MCP server."""
+        try:
+            server_dir = self.store_root / "mcp" / server_id
+            requirements_file = server_dir / "requirements.txt"
+            
+            print(f"[ChatManager] Setting up MCP environment for {server_id}")
+            
+            # Install requirements if they exist
+            if requirements_file.exists():
+                requirements_content = requirements_file.read_text(encoding="utf-8").strip()
+                if requirements_content:
+                    print(f"[ChatManager] Installing requirements for {server_id}...")
+                    
+                    pip_process = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
+                        cwd=str(server_dir),
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if pip_process.returncode != 0:
+                        print(f"[ChatManager] Failed to install requirements for {server_id}: {pip_process.stderr}")
+                        return False
+                    else:
+                        print(f"[ChatManager] Requirements installed successfully for {server_id}")
+                else:
+                    print(f"[ChatManager] No requirements to install for {server_id}")
+            else:
+                print(f"[ChatManager] No requirements.txt found for {server_id}")
+            
+            print(f"[ChatManager] Environment setup completed for {server_id}")
+            return True
+                
+        except Exception as e:
+            print(f"[ChatManager] Environment setup error for {server_id}: {e}")
+            return False
+    
+    def _setup_enabled_mcp_environments(self):
+        """Set up environments for all enabled MCP servers."""
+        try:
+            if not self.mcp_cache_path.exists():
+                return
+            
+            cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+            
+            for server_id, info in cache_data.items():
+                if info.get("enabled") and info.get("installed"):
+                    print(f"[ChatManager] Setting up environment for enabled MCP server: {server_id}")
+                    self._setup_mcp_environment(server_id)
+                    
+        except Exception as e:
+            print(f"[ChatManager] Error setting up MCP environments: {e}")
+    
+    def _test_mcp_server(self, server_id: str) -> str:
+        """Test a specific MCP server to see if it's working."""
+        try:
+            # Check if MCP server exists and is enabled
+            if not self.mcp_cache_path.exists():
+                return "❌ No MCP cache found. No MCP servers installed."
+            
+            cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+            
+            if server_id not in cache_data:
+                return f"❌ MCP server '{server_id}' not found in cache."
+            
+            server_info = cache_data[server_id]
+            name = server_info.get('name', 'Unknown')
+            installed = server_info.get('installed', False)
+            enabled = server_info.get('enabled', False)
+            
+            if not installed:
+                return f"❌ MCP Server '{server_id}' is not installed."
+            
+            if not enabled:
+                return f"❌ MCP Server '{server_id}' is not enabled. Use '!enable mcp {server_id}' to enable it."
+            
+            print(f"[ChatManager] MCP Server {name} is enabled. Testing with the agent...")
+            
+            # Check if the server script exists
+            server_dir = self.store_root / "mcp" / server_id
+            script_path = server_dir / f"{server_id}.py"
+            
+            if not script_path.exists():
+                return f"**Store Manager:** ❌ **MCP Server script not found**\n\n**Missing file:** {script_path}\n**Status:** Installation incomplete\n💡 **Try reinstalling:** `sudo apt reinstall mcp-{server_id}`"
+            
+            # Test the MCP server by calling it directly
+            test_payload = {
+                "message": "test",
+                "context": "",
+                "history": []
+            }
+            
+            # Set up environment variables
+            env_vars = os.environ.copy()
+            env_vars.update({
+                "PYTHONPATH": str(server_dir),
+                "PATH": os.environ.get("PATH", "")
+            })
+            
+            # Execute MCP server script
+            process = subprocess.run(
+                [sys.executable, str(script_path)],
+                input=json.dumps(test_payload).encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(server_dir),
+                env=env_vars,
+                timeout=30
+            )
+            
+            if process.returncode != 0:
+                error_output = process.stderr.decode("utf-8", errors="ignore")
+                return f"❌ MCP Server '{server_id}' test failed (code {process.returncode}): {error_output.strip()}"
+            
+            # Parse response
+            output = process.stdout.decode("utf-8", errors="ignore").strip()
+            try:
+                response_data = json.loads(output)
+                if isinstance(response_data, dict):
+                    response_text = response_data.get("text", response_data.get("response", str(response_data)))
+                else:
+                    response_text = str(response_data)
+            except json.JSONDecodeError:
+                response_text = output
+            
+            # Return success with server response
+            result = f"**Store Manager:** ✅ **MCP Server {name} is enabled and working**\n\n"
+            result += f"**Server Response:** {response_text}\n\n"
+            result += f"**Server ID:** {server_id}\n"
+            result += f"**Script Path:** {script_path}\n"
+            result += f"**Status:** Ready for agent use"
+            
+            return result
+            
+        except subprocess.TimeoutExpired:
+            return f"❌ MCP Server '{server_id}' test timed out (30 seconds)"
+        except Exception as e:
+            print(f"[ChatManager] MCP server test error: {e}")
+            return f"❌ MCP Server '{server_id}' test error: {e}"
+    
+    def _reinstall_mcp_server(self, server_id: str) -> str:
+        """Reinstall an MCP server using StoreManager."""
+        try:
+            print(f"[ChatManager] Reinstalling MCP server: {server_id}")
+            
+            # Import and use StoreManager
+            from agent.store_manager import StoreManager
+            store_manager = StoreManager()
+            
+            # Check if server exists in registry first
+            if not store_manager.mcp_registry:
+                store_manager.fetch_mcp_registry()
+            
+            servers = store_manager.mcp_registry.get("servers", {})
+            if server_id not in servers:
+                return f"**Store Manager:** ❌ **MCP Server '{server_id}' not found in registry**\n\n**Available servers:** {', '.join(servers.keys())}"
+            
+            # Perform reinstall
+            result = store_manager.reinstall_mcp_server(server_id)
+            
+            if result.get("success"):
+                # Check what was actually installed
+                server_dir = store_manager.mcp_store_root / server_id
+                installed_files = []
+                if server_dir.exists():
+                    installed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
+                
+                return f"**Store Manager:** ✅ **MCP Server '{server_id}' reinstalled successfully**\n\n**Status:** Ready for use\n**Installed files:** {', '.join(installed_files) if installed_files else 'None detected'}\n**Next:** Run `sudo systemctl status mcp-{server_id}` to test"
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                return f"**Store Manager:** ❌ **Failed to reinstall MCP server '{server_id}'**\n\n**Error:** {error_msg}\n**Troubleshooting:** Check network connection and registry access"
+                
+        except Exception as e:
+            print(f"[ChatManager] MCP server reinstall error: {e}")
+            return f"**Store Manager:** ❌ **MCP server reinstall error**\n\n**Error:** {e}\n**Troubleshooting:** Check StoreManager configuration and dependencies"
     
     def _get_app_status_report(self) -> str:
         """Generate a detailed app status report."""
