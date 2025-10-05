@@ -84,30 +84,27 @@ class AdminView:
         return ft.Container(
             content=ft.Column(
                 [
-                    # Header
+                    # Header (match Agent/MCP layout with Add/Refresh)
                     ft.Container(
                         content=ft.Row(
                             [
                                 ft.Row(
                                     [
-                                        ft.Icon(
-                                            ft.icons.APPS,  # Apps icon (grid of squares)
-                                            size=28,
-                                            color=ft.colors.BLUE_600,
-                                        ),
-                                        ft.Text(
-                                            "Apps",
-                                            size=24,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=ft.colors.WHITE,
-                                        ),
+                                        ft.Icon(ft.icons.APPS, size=28, color=ft.colors.BLUE_600),
+                                        ft.Text("Apps", size=22, weight=ft.FontWeight.BOLD),
                                     ],
                                     spacing=8,
                                 ),
+                                ft.Container(expand=True),
                                 ft.IconButton(
-                                    icon=ft.icons.SETTINGS,
-                                    on_click=lambda _: self._show_settings(),
-                                    visible=self.on_back is not None,  # Only show in standalone mode
+                                    icon=ft.icons.ADD,
+                                    tooltip="Add Store",
+                                    on_click=lambda e: self._add_custom_store(),
+                                ),
+                                ft.IconButton(
+                                    icon=ft.icons.REFRESH,
+                                    tooltip="Refresh",
+                                    on_click=lambda e: self._ensure_background_sync(),
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -123,26 +120,7 @@ class AdminView:
                         expand=True,
                     ),
                     
-                    # Status Bar
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Icon(
-                                    ft.icons.APPS,
-                                    size=16,
-                                    color=ft.colors.BLUE_600,
-                                ),
-                                ft.Text(
-                                    f"Apps Control Center - Enabled Apps: {sum(1 for app in self.apps if app.get('enabled', False))}",
-                                    size=12,
-                                    color=ft.colors.ON_SURFACE_VARIANT,
-                                ),
-                            ],
-                            spacing=6,
-                        ),
-                        padding=10,
-                        bgcolor=ft.colors.SURFACE_VARIANT,
-                    ),
+                    # Status bar removed to match Agent/MCP minimal layout
                 ],
                 spacing=0,
             ),
@@ -175,13 +153,13 @@ class AdminView:
                                     [
                                         ft.Text(
                                             app.get("name") or app.get("id"),
-                                            size=18,
-                                            weight=ft.FontWeight.BOLD,
+                                            size=14,
+                                            weight=ft.FontWeight.W_600,
                                         ),
                                         ft.Text(
                                             app.get("description", ""),
-                                            size=12,
-                                            color=ft.colors.ON_SURFACE_VARIANT,
+                                            size=11,
+                                            color=ft.colors.GREY_600,
                                         ),
                                     ],
                                     spacing=2,
@@ -203,25 +181,7 @@ class AdminView:
                             ],
                             alignment=ft.MainAxisAlignment.START,
                         ),
-
-                        # Status indicator
-                        ft.Container(
-                            content=ft.Row(
-                                [
-                                    ft.Icon(
-                                        name=ft.icons.CIRCLE,
-                                        color=ft.colors.GREEN if app.get("enabled", False) else ft.colors.GREY,
-                                        size=12,
-                                    ),
-                                    ft.Text(
-                                        "Enabled" if app.get("enabled", False) else "Disabled",
-                                        size=12,
-                                    ),
-                                ],
-                                spacing=5,
-                            ),
-                            padding=ft.padding.only(top=10),
-                        ),
+                        # Status indicator removed to match Agent/MCP layout
                     ],
                     spacing=10,
                 ),

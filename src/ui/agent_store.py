@@ -169,7 +169,7 @@ class AgentStoreView:
         self.page.update()
 
     def _refresh(self):
-        # Re-read cache and update dynamic card instantly without blocking
+        # Re-read cache and update dynamic card; only update mounted controls
         default_id = "adminotaur"
         cache = self._read_cache()
         installed = bool(cache.get(default_id, {}).get("installed", False))
@@ -202,10 +202,17 @@ class AgentStoreView:
             border_radius=8,
             padding=10,
         )
-        if hasattr(self, "_root_content") and len(self._root_content.controls) >= 3:
-            self._root_content.controls[2] = card
-            self._root_content.update()
-        self.page.update()
+        try:
+            if hasattr(self, "_root_content") and len(self._root_content.controls) >= 3:
+                self._root_content.controls[2] = card
+                # Only update if mounted
+                if getattr(self._root_content, "page", None) is not None:
+                    self._root_content.update()
+            # Always request a page update (safe even from thread)
+            self.page.update()
+        except Exception:
+            # Ignore UI update errors from background thread
+            pass
 
     # ---------------
     # Local cache I/O
