@@ -14,17 +14,21 @@ import os
 import subprocess
 import sys
 import asyncio
+import requests
+import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import importlib.util
 
 
 class ChatManager:
     """Manages chat interactions with agents, MCP servers, and apps in proper environments."""
     
-    def __init__(self, page=None):
+    def __init__(self, page=None, ai_client=None, document_manager=None):
         self.page = page
-        self.base_path = Path(__file__).resolve().parents[2]  # src/agent -> src/
+        self.ai_client = ai_client
+        self.document_manager = document_manager
+        self.base_path = Path(__file__).resolve().parents[1]  # src/agent -> src/
         self.store_root = self.base_path / "store"
         
         # Ensure store directories exist
@@ -32,8 +36,912 @@ class ChatManager:
         (self.store_root / "mcp").mkdir(parents=True, exist_ok=True)
         (self.store_root / "app").mkdir(parents=True, exist_ok=True)
         
+        # Registry URLs
+        self.agent_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/personality.json"
+        self.mcp_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
+        
+        # Cache files
+        self.agent_cache_path = self.store_root / "agent" / "cache.json"
+        self.mcp_cache_path = self.store_root / "mcp" / "cache.json"
+        self.app_cache_path = self.store_root / "app" / "cache.json"
+        
+        # Enabled state files
+        self.agent_enabled_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
+        self.mcp_enabled_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
+        self.app_enabled_path = Path.home() / ".decyphertek-ai" / "app-enabled.json"
+        
+        # Ensure enabled state directories exist
+        self.agent_enabled_path.parent.mkdir(parents=True, exist_ok=True)
+        
         print(f"[ChatManager] Initialized with base_path: {self.base_path}")
         print(f"[ChatManager] Store root: {self.store_root}")
+        
+        # Initialize stores in background
+        self._initialize_stores_async()
+    
+    def _initialize_stores_async(self):
+        """Initialize stores in background thread."""
+        def init_worker():
+            try:
+                print("[ChatManager] Initializing stores in background...")
+                self._ensure_default_agent_installed()
+                self._ensure_default_mcp_servers_installed()
+                print("[ChatManager] Store initialization complete")
+            except Exception as e:
+                print(f"[ChatManager] Store initialization error: {e}")
+        
+        thread = threading.Thread(target=init_worker, daemon=True)
+        thread.start()
+    
+    def _ensure_default_agent_installed(self):
+        """Ensure default agent (adminotaur) is installed and enabled."""
+        try:
+            # Check if agent cache exists and has adminotaur
+            if self.agent_cache_path.exists():
+                cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
+                if "adminotaur" in cache_data and cache_data["adminotaur"].get("installed"):
+                    print("[ChatManager] Adminotaur agent already installed")
+                    return
+            
+            # Create default agent cache entry
+            default_agent = {
+                "adminotaur": {
+                    "id": "adminotaur",
+                    "name": "Adminotaur",
+                    "description": "Advanced AI agent with tool-use capabilities",
+                    "installed": True,
+                    "enabled": True,
+                    "repo_url": "https://github.com/decyphertek-io/agent-store",
+                    "folder_path": "adminotaur/",
+                    "module_path": "adminotaur/adminotaur.py",
+                    "class_name": "AdminotaurAgent",
+                    "enable_by_default": True
+                }
+            }
+            
+            self.agent_cache_path.write_text(json.dumps(default_agent, indent=2), encoding="utf-8")
+            print("[ChatManager] Created default agent cache")
+            
+        except Exception as e:
+            print(f"[ChatManager] Error ensuring default agent: {e}")
+    
+    def _ensure_default_mcp_servers_installed(self):
+        """Ensure default MCP servers are installed and enabled."""
+        try:
+            # Check if MCP cache exists
+            if self.mcp_cache_path.exists():
+                cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+                if "web-search" in cache_data and cache_data["web-search"].get("installed"):
+                    print("[ChatManager] Default MCP servers already installed")
+                    return
+            
+            # Create default MCP cache entry
+            default_mcp = {
+                "web-search": {
+                    "id": "web-search",
+                    "name": "Web Search",
+                    "description": "Web search and content retrieval",
+                    "installed": True,
+                    "enabled": True,
+                    "repo_url": "https://github.com/decyphertek-io/mcp-store",
+                    "folder_path": "web-search/",
+                    "module_path": "web-search/web.py",
+                    "enable_by_default": True
+                }
+            }
+            
+            self.mcp_cache_path.write_text(json.dumps(default_mcp, indent=2), encoding="utf-8")
+            print("[ChatManager] Created default MCP cache")
+            
+        except Exception as e:
+            print(f"[ChatManager] Error ensuring default MCP servers: {e}")
+    
+    def fetch_agent_registry(self) -> Dict[str, Any]:
+        """Fetch agent registry from remote URL."""
+        try:
+            response = requests.get(self.agent_registry_url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"[ChatManager] Error fetching agent registry: {e}")
+            return {}
+    
+    def fetch_mcp_registry(self) -> Dict[str, Any]:
+        """Fetch MCP registry from remote URL."""
+        try:
+            response = requests.get(self.mcp_registry_url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"[ChatManager] Error fetching MCP registry: {e}")
+            return {}
+    
+    def fetch_app_registry(self) -> Dict[str, Any]:
+        """Fetch app registry from remote URL."""
+        try:
+            response = requests.get(self.app_registry_url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"[ChatManager] Error fetching app registry: {e}")
+            return {}
+    
+    def install_agent(self, agent_id: str, agent_info: Dict[str, Any]) -> bool:
+        """Install an agent from the registry."""
+        try:
+            agent_dir = self.store_root / "agent" / agent_id
+            agent_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Download agent files (simplified - in real implementation, use GitHub API)
+            print(f"[ChatManager] Installing agent {agent_id} to {agent_dir}")
+            
+            # Update cache
+            if self.agent_cache_path.exists():
+                cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
+            else:
+                cache_data = {}
+            
+            cache_data[agent_id] = {
+                **agent_info,
+                "installed": True,
+                "enabled": agent_info.get("enable_by_default", False)
+            }
+            
+            self.agent_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+            print(f"[ChatManager] Agent {agent_id} installed successfully")
+            return True
+            
+        except Exception as e:
+            print(f"[ChatManager] Error installing agent {agent_id}: {e}")
+            return False
+    
+    def install_mcp_server(self, server_id: str, server_info: Dict[str, Any]) -> bool:
+        """Install an MCP server from the registry."""
+        try:
+            server_dir = self.store_root / "mcp" / server_id
+            server_dir.mkdir(parents=True, exist_ok=True)
+            
+            print(f"[ChatManager] Installing MCP server {server_id} to {server_dir}")
+            
+            # Update cache
+            if self.mcp_cache_path.exists():
+                cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+            else:
+                cache_data = {}
+            
+            cache_data[server_id] = {
+                **server_info,
+                "installed": True,
+                "enabled": server_info.get("enable_by_default", False)
+            }
+            
+            self.mcp_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+            print(f"[ChatManager] MCP server {server_id} installed successfully")
+            return True
+            
+        except Exception as e:
+            print(f"[ChatManager] Error installing MCP server {server_id}: {e}")
+            return False
+    
+    def install_app(self, app_id: str, app_info: Dict[str, Any]) -> bool:
+        """Install an app from the registry."""
+        try:
+            app_dir = self.store_root / "app" / app_id
+            app_dir.mkdir(parents=True, exist_ok=True)
+            
+            print(f"[ChatManager] Installing app {app_id} to {app_dir}")
+            
+            # Update cache
+            if self.app_cache_path.exists():
+                cache_data = json.loads(self.app_cache_path.read_text(encoding="utf-8"))
+            else:
+                cache_data = {}
+            
+            cache_data[app_id] = {
+                **app_info,
+                "installed": True,
+                "enabled": app_info.get("enable_by_default", False)
+            }
+            
+            self.app_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+            print(f"[ChatManager] App {app_id} installed successfully")
+            return True
+            
+        except Exception as e:
+            print(f"[ChatManager] Error installing app {app_id}: {e}")
+            return False
+    
+    def set_agent_enabled(self, agent_id: str, enabled: bool) -> bool:
+        """Enable/disable an agent."""
+        try:
+            # Update cache
+            if self.agent_cache_path.exists():
+                cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
+                if agent_id in cache_data:
+                    cache_data[agent_id]["enabled"] = enabled
+                    self.agent_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+                    print(f"[ChatManager] Agent {agent_id} {'enabled' if enabled else 'disabled'}")
+                    return True
+            return False
+        except Exception as e:
+            print(f"[ChatManager] Error setting agent {agent_id} enabled state: {e}")
+            return False
+    
+    def set_mcp_enabled(self, server_id: str, enabled: bool) -> bool:
+        """Enable/disable an MCP server."""
+        try:
+            # Update cache
+            if self.mcp_cache_path.exists():
+                cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+                if server_id in cache_data:
+                    cache_data[server_id]["enabled"] = enabled
+                    self.mcp_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+                    print(f"[ChatManager] MCP server {server_id} {'enabled' if enabled else 'disabled'}")
+                    return True
+            return False
+        except Exception as e:
+            print(f"[ChatManager] Error setting MCP server {server_id} enabled state: {e}")
+            return False
+    
+    def set_app_enabled(self, app_id: str, enabled: bool) -> bool:
+        """Enable/disable an app."""
+        try:
+            # Update cache
+            if self.app_cache_path.exists():
+                cache_data = json.loads(self.app_cache_path.read_text(encoding="utf-8"))
+                if app_id in cache_data:
+                    cache_data[app_id]["enabled"] = enabled
+                    self.app_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+                    print(f"[ChatManager] App {app_id} {'enabled' if enabled else 'disabled'}")
+                    return True
+            return False
+        except Exception as e:
+            print(f"[ChatManager] Error setting app {app_id} enabled state: {e}")
+            return False
+    
+    async def process_message(self, user_message: str, message_history: List[Dict], use_rag: bool = True) -> str:
+        """
+        Main message processing method that handles:
+        - Agent commands (!agent ...)
+        - RAG context retrieval
+        - Direct LLM chat
+        - Tool invocations
+        """
+        print(f"[ChatManager] Processing message: {user_message[:50]}...")
+        
+        # Query RAG if enabled and document manager available
+        rag_context = ""
+        if use_rag and self.document_manager:
+            print(f"[ChatManager] Querying RAG for context...")
+            try:
+                results = await self.document_manager.query_documents(user_message, n_results=3)
+                
+                if results:
+                    print(f"[ChatManager] Found {len(results)} relevant document chunks")
+                    rag_context = "\n\nRelevant context from documents:\n"
+                    for i, result in enumerate(results, 1):
+                        rag_context += f"\n[{result['filename']}]\n{result['content']}\n"
+                    rag_context += "\nPlease use the above context to answer the question.\n"
+                else:
+                    print("[ChatManager] No relevant documents found")
+            except Exception as e:
+                print(f"[ChatManager] RAG query error: {e}")
+                rag_context = ""
+        
+        # Prepare messages with RAG context
+        messages_to_send = message_history.copy()
+        if rag_context:
+            # Add RAG context to the last user message
+            messages_to_send[-1] = {
+                "role": "user", 
+                "content": user_message + rag_context
+            }
+        
+        # Special health-check command from chat
+        if user_message.strip() == "sudo systemctl status chat_manager":
+            print(f"[ChatManager] Health check command detected")
+            return "OK:200;"
+        
+        # Agent status check command
+        if user_message.strip() == "sudo systemctl status agent":
+            print(f"[ChatManager] Agent status command detected")
+            return self._get_agent_status_report()
+        
+        # MCP status check command
+        if user_message.strip() == "sudo systemctl status mcp":
+            print(f"[ChatManager] MCP status command detected")
+            return self._get_mcp_status_report()
+        
+        # App status check command
+        if user_message.strip() == "sudo systemctl status app":
+            print(f"[ChatManager] App status command detected")
+            return self._get_app_status_report()
+        
+        # Specific agent test command
+        if user_message.strip() == "sudo systemctl status agent-adminotaur":
+            print(f"[ChatManager] Adminotaur agent test command detected")
+            return self._test_adminotaur_agent()
+
+        # Check for debug command
+        if user_message.strip() == "!debug":
+            print(f"[ChatManager] Debug command detected")
+            return self.debug_info()
+        
+        # Check for management commands
+        if user_message.strip().startswith("!install "):
+            return self._handle_install_command(user_message.strip()[9:])
+        
+        if user_message.strip().startswith("!enable "):
+            return self._handle_enable_command(user_message.strip()[8:])
+        
+        if user_message.strip().startswith("!disable "):
+            return self._handle_disable_command(user_message.strip()[9:])
+        
+        if user_message.strip() == "!list":
+            return self._handle_list_command()
+        
+        # Check for agent command
+        if user_message.strip().startswith("!agent "):
+            agent_payload = user_message.strip()[7:]
+            print(f"[ChatManager] Agent command detected: {agent_payload}")
+            return self.process_agent_command(agent_payload, rag_context, message_history)
+        
+        # Check for tool command (e.g., !tool web-search:search "query")
+        if user_message.strip().startswith("!tool "):
+            tool_spec = user_message.strip()[6:]
+            print(f"[ChatManager] Tool command detected: {tool_spec}")
+            return self._process_tool_command(tool_spec)
+        
+        # Default: Direct LLM chat
+        if not self.ai_client:
+            return "⚠️ AI client not available. Please check your API configuration."
+        
+        print(f"[ChatManager] Using direct LLM client for chat")
+        try:
+            response = await self.ai_client.send_message(messages_to_send)
+            return response or "⚠️ No response from AI client"
+        except Exception as e:
+            print(f"[ChatManager] LLM client error: {e}")
+            return f"⚠️ Error communicating with AI: {e}"
+    
+    def _process_tool_command(self, tool_spec: str) -> str:
+        """Process tool commands like 'web-search:search "query"' or 'rag:query_documents "query"'."""
+        try:
+            # Parse tool specification
+            if ":" not in tool_spec:
+                return f"Invalid tool specification: {tool_spec}. Expected format: 'server:tool [parameters]'"
+            
+            parts = tool_spec.split(":", 1)
+            server_id = parts[0].strip()
+            tool_and_params = parts[1].strip()
+            
+            # Parse tool name and parameters
+            if " " in tool_and_params:
+                tool_name, param_str = tool_and_params.split(" ", 1)
+                # Try to parse parameters as JSON, fallback to simple string
+                try:
+                    parameters = json.loads(param_str)
+                except json.JSONDecodeError:
+                    parameters = {"query": param_str.strip('"\'')}
+            else:
+                tool_name = tool_and_params
+                parameters = {}
+            
+            print(f"[ChatManager] Invoking tool: {server_id}:{tool_name} with params: {parameters}")
+            return self.invoke_mcp_server(server_id, tool_name, parameters)
+            
+        except Exception as e:
+            return f"Tool command error: {e}"
+    
+    def _handle_install_command(self, command: str) -> str:
+        """Handle !install commands."""
+        try:
+            parts = command.split()
+            if len(parts) < 2:
+                return "Usage: !install <type> <id>\nTypes: agent, mcp, app"
+            
+            install_type, item_id = parts[0], parts[1]
+            
+            if install_type == "agent":
+                registry = self.fetch_agent_registry()
+                if item_id in registry.get("agents", {}):
+                    success = self.install_agent(item_id, registry["agents"][item_id])
+                    return f"✅ Agent '{item_id}' installed successfully" if success else f"❌ Failed to install agent '{item_id}'"
+                else:
+                    return f"❌ Agent '{item_id}' not found in registry"
+            
+            elif install_type == "mcp":
+                registry = self.fetch_mcp_registry()
+                if item_id in registry.get("servers", {}):
+                    success = self.install_mcp_server(item_id, registry["servers"][item_id])
+                    return f"✅ MCP server '{item_id}' installed successfully" if success else f"❌ Failed to install MCP server '{item_id}'"
+                else:
+                    return f"❌ MCP server '{item_id}' not found in registry"
+            
+            elif install_type == "app":
+                registry = self.fetch_app_registry()
+                if item_id in registry.get("apps", {}):
+                    success = self.install_app(item_id, registry["apps"][item_id])
+                    return f"✅ App '{item_id}' installed successfully" if success else f"❌ Failed to install app '{item_id}'"
+                else:
+                    return f"❌ App '{item_id}' not found in registry"
+            
+            else:
+                return f"❌ Unknown install type: {install_type}. Use: agent, mcp, app"
+                
+        except Exception as e:
+            return f"❌ Install command error: {e}"
+    
+    def _handle_enable_command(self, command: str) -> str:
+        """Handle !enable commands."""
+        try:
+            parts = command.split()
+            if len(parts) < 2:
+                return "Usage: !enable <type> <id>\nTypes: agent, mcp, app"
+            
+            enable_type, item_id = parts[0], parts[1]
+            
+            if enable_type == "agent":
+                success = self.set_agent_enabled(item_id, True)
+                return f"✅ Agent '{item_id}' enabled" if success else f"❌ Failed to enable agent '{item_id}'"
+            
+            elif enable_type == "mcp":
+                success = self.set_mcp_enabled(item_id, True)
+                return f"✅ MCP server '{item_id}' enabled" if success else f"❌ Failed to enable MCP server '{item_id}'"
+            
+            elif enable_type == "app":
+                success = self.set_app_enabled(item_id, True)
+                return f"✅ App '{item_id}' enabled" if success else f"❌ Failed to enable app '{item_id}'"
+            
+            else:
+                return f"❌ Unknown enable type: {enable_type}. Use: agent, mcp, app"
+                
+        except Exception as e:
+            return f"❌ Enable command error: {e}"
+    
+    def _handle_disable_command(self, command: str) -> str:
+        """Handle !disable commands."""
+        try:
+            parts = command.split()
+            if len(parts) < 2:
+                return "Usage: !disable <type> <id>\nTypes: agent, mcp, app"
+            
+            disable_type, item_id = parts[0], parts[1]
+            
+            if disable_type == "agent":
+                success = self.set_agent_enabled(item_id, False)
+                return f"✅ Agent '{item_id}' disabled" if success else f"❌ Failed to disable agent '{item_id}'"
+            
+            elif disable_type == "mcp":
+                success = self.set_mcp_enabled(item_id, False)
+                return f"✅ MCP server '{item_id}' disabled" if success else f"❌ Failed to disable MCP server '{item_id}'"
+            
+            elif disable_type == "app":
+                success = self.set_app_enabled(item_id, False)
+                return f"✅ App '{item_id}' disabled" if success else f"❌ Failed to disable app '{item_id}'"
+            
+            else:
+                return f"❌ Unknown disable type: {disable_type}. Use: agent, mcp, app"
+                
+        except Exception as e:
+            return f"❌ Disable command error: {e}"
+    
+    def _handle_list_command(self) -> str:
+        """Handle !list command to show all installed items."""
+        try:
+            result = ["📋 **Installed Items:**\n"]
+            
+            # List agents
+            if self.agent_cache_path.exists():
+                cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
+                result.append("🤖 **Agents:**")
+                for agent_id, info in cache_data.items():
+                    status = "✅ Enabled" if info.get("enabled") else "❌ Disabled"
+                    result.append(f"  • {agent_id}: {info.get('name', 'Unknown')} - {status}")
+                result.append("")
+            
+            # List MCP servers
+            if self.mcp_cache_path.exists():
+                cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+                result.append("🔧 **MCP Servers:**")
+                for server_id, info in cache_data.items():
+                    status = "✅ Enabled" if info.get("enabled") else "❌ Disabled"
+                    result.append(f"  • {server_id}: {info.get('name', 'Unknown')} - {status}")
+                result.append("")
+            
+            # List apps
+            if self.app_cache_path.exists():
+                cache_data = json.loads(self.app_cache_path.read_text(encoding="utf-8"))
+                result.append("📱 **Apps:**")
+                for app_id, info in cache_data.items():
+                    status = "✅ Enabled" if info.get("enabled") else "❌ Disabled"
+                    result.append(f"  • {app_id}: {info.get('name', 'Unknown')} - {status}")
+                result.append("")
+            
+            return "\n".join(result) if len(result) > 1 else "📋 No items installed yet."
+            
+        except Exception as e:
+            return f"❌ List command error: {e}"
+    
+    def _get_agent_status_report(self) -> str:
+        """Generate a detailed agent status report."""
+        try:
+            result = ["🤖 **Agent Status Report**\n"]
+            
+            if not self.agent_cache_path.exists():
+                result.append("❌ No agent cache found. No agents installed.")
+                return "\n".join(result)
+            
+            cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
+            
+            if not cache_data:
+                result.append("❌ No agents found in cache.")
+                return "\n".join(result)
+            
+            result.append(f"📊 **Total Agents:** {len(cache_data)}")
+            result.append("")
+            
+            enabled_count = 0
+            disabled_count = 0
+            
+            for agent_id, info in cache_data.items():
+                name = info.get('name', 'Unknown')
+                description = info.get('description', 'No description')
+                installed = info.get('installed', False)
+                enabled = info.get('enabled', False)
+                
+                if enabled:
+                    status_icon = "✅"
+                    status_text = "ENABLED"
+                    enabled_count += 1
+                else:
+                    status_icon = "❌"
+                    status_text = "DISABLED"
+                    disabled_count += 1
+                
+                install_status = "📦 Installed" if installed else "⚠️ Not Installed"
+                
+                result.append(f"{status_icon} **{agent_id}** ({name})")
+                result.append(f"   Status: {status_text}")
+                result.append(f"   Install: {install_status}")
+                result.append(f"   Description: {description}")
+                result.append("")
+            
+            result.append("📈 **Summary:**")
+            result.append(f"   • Enabled: {enabled_count}")
+            result.append(f"   • Disabled: {disabled_count}")
+            result.append(f"   • Total: {len(cache_data)}")
+            
+            if enabled_count == 0:
+                result.append("")
+                result.append("⚠️ **Warning:** No agents are currently enabled!")
+                result.append("   Use '!enable agent <id>' to enable an agent.")
+            
+            return "\n".join(result)
+            
+        except Exception as e:
+            return f"❌ Agent status report error: {e}"
+    
+    def _get_mcp_status_report(self) -> str:
+        """Generate a detailed MCP server status report."""
+        try:
+            result = ["🔧 **MCP Server Status Report**\n"]
+            
+            if not self.mcp_cache_path.exists():
+                result.append("❌ No MCP cache found. No MCP servers installed.")
+                return "\n".join(result)
+            
+            cache_data = json.loads(self.mcp_cache_path.read_text(encoding="utf-8"))
+            
+            if not cache_data:
+                result.append("❌ No MCP servers found in cache.")
+                return "\n".join(result)
+            
+            result.append(f"📊 **Total MCP Servers:** {len(cache_data)}")
+            result.append("")
+            
+            enabled_count = 0
+            disabled_count = 0
+            
+            for server_id, info in cache_data.items():
+                name = info.get('name', 'Unknown')
+                description = info.get('description', 'No description')
+                installed = info.get('installed', False)
+                enabled = info.get('enabled', False)
+                
+                if enabled:
+                    status_icon = "✅"
+                    status_text = "ENABLED"
+                    enabled_count += 1
+                else:
+                    status_icon = "❌"
+                    status_text = "DISABLED"
+                    disabled_count += 1
+                
+                install_status = "📦 Installed" if installed else "⚠️ Not Installed"
+                
+                result.append(f"{status_icon} **{server_id}** ({name})")
+                result.append(f"   Status: {status_text}")
+                result.append(f"   Install: {install_status}")
+                result.append(f"   Description: {description}")
+                result.append("")
+            
+            result.append("📈 **Summary:**")
+            result.append(f"   • Enabled: {enabled_count}")
+            result.append(f"   • Disabled: {disabled_count}")
+            result.append(f"   • Total: {len(cache_data)}")
+            
+            if enabled_count == 0:
+                result.append("")
+                result.append("⚠️ **Warning:** No MCP servers are currently enabled!")
+                result.append("   Use '!enable mcp <id>' to enable an MCP server.")
+            
+            return "\n".join(result)
+            
+        except Exception as e:
+            return f"❌ MCP status report error: {e}"
+    
+    def _get_app_status_report(self) -> str:
+        """Generate a detailed app status report."""
+        try:
+            result = ["📱 **App Status Report**\n"]
+            
+            if not self.app_cache_path.exists():
+                result.append("❌ No app cache found. No apps installed.")
+                return "\n".join(result)
+            
+            cache_data = json.loads(self.app_cache_path.read_text(encoding="utf-8"))
+            
+            if not cache_data:
+                result.append("❌ No apps found in cache.")
+                return "\n".join(result)
+            
+            result.append(f"📊 **Total Apps:** {len(cache_data)}")
+            result.append("")
+            
+            enabled_count = 0
+            disabled_count = 0
+            
+            for app_id, info in cache_data.items():
+                name = info.get('name', 'Unknown')
+                description = info.get('description', 'No description')
+                installed = info.get('installed', False)
+                enabled = info.get('enabled', False)
+                
+                if enabled:
+                    status_icon = "✅"
+                    status_text = "ENABLED"
+                    enabled_count += 1
+                else:
+                    status_icon = "❌"
+                    status_text = "DISABLED"
+                    disabled_count += 1
+                
+                install_status = "📦 Installed" if installed else "⚠️ Not Installed"
+                
+                result.append(f"{status_icon} **{app_id}** ({name})")
+                result.append(f"   Status: {status_text}")
+                result.append(f"   Install: {install_status}")
+                result.append(f"   Description: {description}")
+                result.append("")
+            
+            result.append("📈 **Summary:**")
+            result.append(f"   • Enabled: {enabled_count}")
+            result.append(f"   • Disabled: {disabled_count}")
+            result.append(f"   • Total: {len(cache_data)}")
+            
+            if enabled_count == 0:
+                result.append("")
+                result.append("⚠️ **Warning:** No apps are currently enabled!")
+                result.append("   Use '!enable app <id>' to enable an app.")
+            
+            return "\n".join(result)
+            
+        except Exception as e:
+            return f"❌ App status report error: {e}"
+    
+    def _test_adminotaur_agent(self) -> str:
+        """Test the adminotaur agent with a quick health check."""
+        try:
+            print("[ChatManager] Testing adminotaur agent...")
+            
+            # Check if adminotaur is installed and enabled
+            agent_info = self.get_enabled_agent()
+            if not agent_info or agent_info.get("id") != "adminotaur":
+                return "❌ Adminotaur agent not found or not enabled. Use '!enable agent adminotaur' to enable it."
+            
+            # Check if agent files exist
+            agent_dir = self.store_root / "agent" / "adminotaur"
+            script_path = agent_dir / "adminotaur.py"
+            
+            print(f"[ChatManager] Checking agent path: {script_path}")
+            print(f"[ChatManager] Path exists: {script_path.exists()}")
+            print(f"[ChatManager] Store root: {self.store_root}")
+            print(f"[ChatManager] Agent dir: {agent_dir}")
+            
+            if not script_path.exists():
+                return f"❌ Adminotaur script not found at {script_path}. Agent may not be properly installed."
+            
+            # For Chaquopy, we use system Python directly (no venv needed)
+            python_exec = sys.executable
+            print(f"[ChatManager] Using system Python: {python_exec}")
+            
+            # Check if requirements need to be installed
+            requirements_file = agent_dir / "requirements.txt"
+            if requirements_file.exists():
+                print("[ChatManager] Checking if requirements need to be installed...")
+                setup_result = self._setup_adminotaur_environment()
+                if not setup_result:
+                    return "❌ Adminotaur Agent is Disabled. Let me troubleshoot why it's not working...\n\n" + self._get_troubleshooting_info()
+                
+                # Re-run the test after setup
+                print("[ChatManager] Environment setup complete, re-running test...")
+                return self._test_adminotaur_agent()
+            
+            # Run a quick test command
+            test_payload = {
+                "message": "health_check",
+                "context": "",
+                "history": []
+            }
+            
+            print("[ChatManager] Running adminotaur health check...")
+            
+            # Set up environment variables
+            env_vars = os.environ.copy()
+            env_vars.update({
+                "PYTHONPATH": str(agent_dir),
+                "PATH": os.environ.get("PATH", "")
+            })
+            
+            # Execute agent script with health check using system Python
+            process = subprocess.run(
+                [python_exec, str(script_path)],
+                input=json.dumps(test_payload).encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(agent_dir),
+                env=env_vars,
+                timeout=30  # 30 second timeout for health check
+            )
+            
+            if process.returncode != 0:
+                error_output = process.stderr.decode("utf-8", errors="ignore")
+                return f"❌ Adminotaur agent test failed (code {process.returncode}): {error_output.strip()}"
+            
+            # Parse response
+            output = process.stdout.decode("utf-8", errors="ignore").strip()
+            try:
+                response_data = json.loads(output)
+                if isinstance(response_data, dict):
+                    response_text = response_data.get("text", response_data.get("response", str(response_data)))
+                else:
+                    response_text = str(response_data)
+            except json.JSONDecodeError:
+                response_text = output
+            
+            # Check if response indicates readiness
+            if "ready" in response_text.lower() or "health" in response_text.lower() or "ok" in response_text.lower():
+                return "✅ Decyphertek AI is ready"
+            else:
+                return f"✅ Adminotaur agent is responding: {response_text[:100]}..."
+                
+        except subprocess.TimeoutExpired:
+            return "❌ Adminotaur agent test timed out (30 seconds)"
+        except Exception as e:
+            print(f"[ChatManager] Adminotaur test error: {e}")
+            return f"❌ Adminotaur agent test error: {e}"
+    
+    def _setup_adminotaur_environment(self) -> bool:
+        """Set up the adminotaur agent environment (install requirements to system Python)."""
+        try:
+            agent_dir = self.store_root / "agent" / "adminotaur"
+            requirements_file = agent_dir / "requirements.txt"
+            
+            print(f"[ChatManager] Setting up environment in {agent_dir}")
+            
+            # Install requirements directly to system Python (Chaquopy environment)
+            if requirements_file.exists():
+                print("[ChatManager] Installing requirements to system Python...")
+                requirements_content = requirements_file.read_text(encoding="utf-8").strip()
+                if requirements_content:
+                    print(f"[ChatManager] Requirements to install: {requirements_content}")
+                    
+                    pip_process = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
+                        cwd=str(agent_dir),
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if pip_process.returncode != 0:
+                        print(f"[ChatManager] Failed to install requirements: {pip_process.stderr}")
+                        print(f"[ChatManager] Pip stdout: {pip_process.stdout}")
+                        return False
+                    else:
+                        print("[ChatManager] Requirements installed successfully")
+                        print(f"[ChatManager] Pip output: {pip_process.stdout}")
+                else:
+                    print("[ChatManager] No requirements to install (empty file)")
+            else:
+                print("[ChatManager] No requirements.txt found, skipping requirements installation")
+            
+            print("[ChatManager] Environment setup completed successfully")
+            return True
+                
+        except Exception as e:
+            print(f"[ChatManager] Environment setup error: {e}")
+            return False
+    
+    def _get_troubleshooting_info(self) -> str:
+        """Get detailed troubleshooting information for adminotaur agent."""
+        try:
+            agent_dir = self.store_root / "agent" / "adminotaur"
+            script_path = agent_dir / "adminotaur.py"
+            requirements_file = agent_dir / "requirements.txt"
+            
+            info_lines = ["🔍 **Troubleshooting Information:**\n"]
+            
+            # Check agent directory
+            info_lines.append(f"📁 **Agent Directory:** {agent_dir}")
+            info_lines.append(f"   Exists: {'✅' if agent_dir.exists() else '❌'}")
+            
+            # Check script file
+            info_lines.append(f"📄 **Script File:** {script_path}")
+            info_lines.append(f"   Exists: {'✅' if script_path.exists() else '❌'}")
+            
+            # Check requirements
+            info_lines.append(f"📋 **Requirements File:** {requirements_file}")
+            info_lines.append(f"   Exists: {'✅' if requirements_file.exists() else '❌'}")
+            
+            if requirements_file.exists():
+                try:
+                    requirements_content = requirements_file.read_text(encoding="utf-8").strip()
+                    info_lines.append(f"   Content: {requirements_content}")
+                except Exception as e:
+                    info_lines.append(f"   Error reading: {e}")
+            
+            # Check Python environment
+            info_lines.append(f"🐍 **Python Environment:**")
+            info_lines.append(f"   Executable: {sys.executable}")
+            info_lines.append(f"   Version: {sys.version}")
+            
+            # Check PYTHONPATH
+            pythonpath = os.environ.get("PYTHONPATH", "Not set")
+            info_lines.append(f"   PYTHONPATH: {pythonpath}")
+            
+            # Try to import the agent script
+            info_lines.append(f"🧪 **Import Test:**")
+            try:
+                import sys
+                sys.path.insert(0, str(agent_dir))
+                import adminotaur
+                info_lines.append("   ✅ Agent script imports successfully")
+            except Exception as e:
+                info_lines.append(f"   ❌ Import failed: {e}")
+            
+            # Check if requirements are installed
+            if requirements_file.exists():
+                info_lines.append(f"📦 **Requirements Check:**")
+                try:
+                    requirements_content = requirements_file.read_text(encoding="utf-8").strip()
+                    if requirements_content:
+                        for req in requirements_content.split('\n'):
+                            req = req.strip()
+                            if req and not req.startswith('#'):
+                                try:
+                                    __import__(req.split('==')[0].split('>=')[0].split('<=')[0])
+                                    info_lines.append(f"   ✅ {req}")
+                                except ImportError:
+                                    info_lines.append(f"   ❌ {req} (not installed)")
+                except Exception as e:
+                    info_lines.append(f"   Error checking requirements: {e}")
+            
+            return "\n".join(info_lines)
+            
+        except Exception as e:
+            return f"❌ Error getting troubleshooting info: {e}"
     
     def get_enabled_agent(self) -> Optional[Dict[str, Any]]:
         """Get the currently enabled agent from cache."""
@@ -277,12 +1185,58 @@ class ChatManager:
         """Process an agent command and return the response."""
         agent_info = self.get_enabled_agent()
         if not agent_info:
-            return "No agent is currently enabled. Please install and enable an agent from the Agents tab."
+            return "ℹ️ No agent is currently enabled. Install and enable an agent from the Agents tab, then try '!agent <task>'."
         
         agent_id = agent_info["id"]
         print(f"[ChatManager] Processing agent command for {agent_id}: {command[:50]}...")
         
-        return self.invoke_agent(agent_id, command, context, history)
+        response = self.invoke_agent(agent_id, command, context, history)
+        
+        # Provide helpful guidance if agent invocation fails
+        if response in ("Agent personality not installed.", "Agent invocation failed") or response.startswith("Agent error:"):
+            return f"ℹ️ Agent not available. Install and enable one in Agents tab, then try '!agent <task>'.\n\nError: {response}"
+        
+        return response
+    
+    def get_agent_status(self) -> Dict[str, Any]:
+        """Get current agent status and available tools."""
+        agent_info = self.get_enabled_agent()
+        enabled_mcp_servers = self.get_enabled_mcp_servers()
+        available_tools = self.get_available_tools()
+        
+        return {
+            "agent": agent_info,
+            "mcp_servers": enabled_mcp_servers,
+            "available_tools": available_tools,
+            "has_agent": agent_info is not None,
+            "has_tools": len(available_tools) > 0
+        }
+    
+    def debug_info(self) -> str:
+        """Get debug information about the ChatManager state."""
+        status = self.get_agent_status()
+        debug_lines = [
+            "=== ChatManager Debug Info ===",
+            f"Base path: {self.base_path}",
+            f"Store root: {self.store_root}",
+            f"Agent cache exists: {(self.store_root / 'agent' / 'cache.json').exists()}",
+            f"MCP cache exists: {(self.store_root / 'mcp' / 'cache.json').exists()}",
+            f"App cache exists: {(self.store_root / 'app' / 'cache.json').exists()}",
+            "",
+            "Agent Status:",
+            f"  Has agent: {status['has_agent']}",
+            f"  Agent info: {status['agent']}",
+            "",
+            "MCP Servers:",
+            f"  Count: {len(status['mcp_servers'])}",
+            f"  Servers: {[s['id'] for s in status['mcp_servers']]}",
+            "",
+            "Available Tools:",
+            f"  Count: {len(status['available_tools'])}",
+            f"  Tools: {status['available_tools']}",
+            "=============================="
+        ]
+        return "\n".join(debug_lines)
     
     def process_tool_command(self, tool_spec: str, parameters: Dict[str, Any]) -> str:
         """Process a tool command and return the response."""
@@ -294,3 +1248,25 @@ class ChatManager:
         print(f"[ChatManager] Processing tool command: {server_id}:{tool_name}")
         
         return self.invoke_mcp_server(server_id, tool_name, parameters)
+
+
+def _main_cli(argv: List[str]) -> int:
+    try:
+        if len(argv) >= 2 and argv[1] == "status":
+            # Lightweight status check
+            print("OK:200;")
+            return 0
+        elif len(argv) >= 2 and argv[1] == "debug":
+            cm = ChatManager()
+            print(cm.debug_info())
+            return 0
+        else:
+            print("Usage: python -m src.agent.chat_manager [status|debug]")
+            return 2
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(_main_cli(sys.argv))

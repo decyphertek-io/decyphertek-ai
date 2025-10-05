@@ -1,0 +1,14 @@
+{
+  "adminotaur": {
+    "id": "adminotaur",
+    "name": "Adminotaur",
+    "description": "Advanced AI agent with tool-use capabilities",
+    "installed": true,
+    "enabled": true,
+    "repo_url": "https://github.com/decyphertek-io/agent-store",
+    "folder_path": "adminotaur/",
+    "module_path": "adminotaur/adminotaur.py",
+    "class_name": "AdminotaurAgent",
+    "enable_by_default": true
+  }
+}

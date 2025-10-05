@@ -367,43 +367,20 @@ class ChatView:
             self.page.update()
         
         try:
-            # Query RAG if enabled
-            rag_context = ""
-            if self.use_rag and self.doc_manager:
-                print(f"[Chat] Querying RAG for context...")
-                results = await self.doc_manager.query_documents(user_message, n_results=3)
-                
-                if results:
-                    print(f"[Chat] Found {len(results)} relevant document chunks")
-                    rag_context = "\n\nRelevant context from documents:\n"
-                    for i, result in enumerate(results, 1):
-                        rag_context += f"\n[{result['filename']}]\n{result['content']}\n"
-                    rag_context += "\nPlease use the above context to answer the question.\n"
-                else:
-                    print("[Chat] No relevant documents found")
+            # Use ChatManager to process the message
+            from agent.chat_manager import ChatManager
+            chat_manager = ChatManager(
+                page=self.page,
+                ai_client=self.client,
+                document_manager=self.doc_manager
+            )
             
-            # Prepare messages with RAG context
-            messages_to_send = self.messages.copy()
-            if rag_context:
-                # Add RAG context to the last user message
-                messages_to_send[-1] = {
-                    "role": "user", 
-                    "content": user_message + rag_context
-                }
-            
-            print(f"[Chat] Calling API with {len(messages_to_send)} messages in history")
-            
-            # Agent personality subprocess (optional): trigger only with explicit prefix
-            if user_message.strip().startswith("!agent "):
-                payload = user_message.strip()[7:]
-                response = self._call_personality_subprocess(payload, rag_context)
-                if response in ("Agent personality not installed.", "Agent invocation failed") or response.startswith("Agent error:"):
-                    # Gentle guidance to install/enable from Agents tab
-                    self._add_message("system", "ℹ️ Agent not available. Install and enable one in Agents tab, then try '!agent <task>'.")
-            else:
-                # Get response - Always use direct client for chat; agent is separate for tools
-                print("[Chat] Using direct client for chat")
-                response = await self.client.send_message(messages_to_send)
+            print(f"[Chat] Processing message with ChatManager...")
+            response = await chat_manager.process_message(
+                user_message=user_message,
+                message_history=self.messages,
+                use_rag=self.use_rag
+            )
             
             print(f"[Chat] Got response: {response[:100] if response else 'None'}...")
             
@@ -445,15 +422,6 @@ class ChatView:
             self.page.update()
             print("[Chat] Message complete, UI re-enabled")
 
-    def _call_personality_subprocess(self, user_payload: str, rag_context: str | None) -> str:
-        """Invoke enabled personality script using ChatManager."""
-        try:
-            from agent.chat_manager import ChatManager
-            chat_manager = ChatManager(page=self.page)
-            return chat_manager.process_agent_command(user_payload, rag_context or "", self.messages)
-        except Exception as e:
-            print(f"[Chat] ChatManager error: {e}")
-            return f"Agent invocation failed: {e}"
     
     def _add_message(self, role: str, content: str, save_to_session: bool = True):
         """Add message to chat display and optionally save to session"""
