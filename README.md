@@ -14,11 +14,11 @@ A modern AI assistant with chat, document management, and app integration capabi
 ## Quick Start
 
 1. **Install Dependencies**
-   ```bash
+```bash
    # Using Poetry (recommended)
    curl -sSL https://install.python-poetry.org | python3 -
-   poetry install
-   
+poetry install
+
    # Or using pip
    pip install -r requirements.txt
    ```

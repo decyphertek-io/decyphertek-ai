@@ -2,11 +2,26 @@
 """
 LangChain Agent for DecypherTek AI
 Integrates OpenRouter/Ollama with MCP tools for autonomous task execution
+
+Lightweight enhancement: if an Agent Store personality (Adminotaur) is present
+or downloadable, this module will load it and delegate chat calls for full
+modular personality behavior. Otherwise, it falls back to the built-in tools.
+
+Manager role: This module's primary responsibility is to manage STORES
+(Agent Store, MCP Store, App Store, and RAG resources) — fetching remote
+metadata, downloading/installing items, preparing environments, and enabling
+items. The LLM should interact with the downloaded personality (e.g. Adminotaur).
 """
 
 import asyncio
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+import os
+import io
+import zipfile
+import importlib.util
+from urllib.parse import urlparse
+import urllib.request
 
 # Removed MCPToolkit - now using modular MCP server approach
 
@@ -36,7 +51,8 @@ class DecypherTekAgent:
         self.ai_client = ai_client
         self.provider = provider
         self.verbose = verbose
-        self.enable_tools = enable_tools
+        # Manager role only: disable built-in tools; delegate to personality
+        self.enable_tools = False
         self.doc_manager = doc_manager
         
         # MCP server discovery and management
@@ -48,22 +64,17 @@ class DecypherTekAgent:
         self.app_store_path = Path(__file__).parent.parent.parent / "app-store"
         self.available_apps = self._discover_flet_apps()
         
-        # Get tools from discovered MCP servers
+        # Manager role: no tool registration here
         self.tools = []
-        if enable_tools:
-            self.tools = self._get_mcp_tools()
-            
-            # Add RAG tools if document manager is available
-            if self.doc_manager:
-                self.tools.extend(self._get_rag_tools())
-            
-            # Add Ollama management tool if using Ollama
-            if provider == "ollama":
-                from agent.mcp_tools import OllamaTool
-                ollama_tool = OllamaTool(ollama_client=ai_client)
-                self.tools.append(ollama_tool)
         
-        # Build system prompt with tool awareness
+        # Personality hook: try to load Adminotaur from Agent Store
+        self.personality_agent = None
+        try:
+            self._load_personality_if_available()
+        except Exception as e:
+            print(f"[Agent] Personality load skipped: {e}")
+
+        # Build system prompt with tool awareness (used for fallback mode)
         self.system_prompt = self._build_system_prompt()
         
         print(f"[Agent] Initialized with {len(self.tools)} tools: {[t.name for t in self.tools]}")
@@ -701,30 +712,186 @@ class DecypherTekAgent:
             String response (with URLs that will auto-embed)
         """
         try:
-            # Build messages
-            messages = [
-                {"role": "system", "content": self.system_prompt}
-            ]
-            
+            # Always delegate to downloaded personality if present
+            if self.personality_agent and hasattr(self.personality_agent, "chat"):
+                return await self.personality_agent.chat(message, context=context)
+
+            # Fallback: do a direct chat call without tools
+            messages = [{"role": "system", "content": self.system_prompt}]
             if context:
-                messages.append({
-                    "role": "system",
-                    "content": f"Context from knowledge base:\n{context}"
-                })
-            
+                messages.append({"role": "system", "content": f"Context from knowledge base:\n{context}"})
             messages.append({"role": "user", "content": message})
-            
-            # Check if we should use tools
-            if self.enable_tools and self._should_use_tools(message):
-                return await self._agent_chat(messages, message)
-            else:
-                return await self._direct_chat(messages)
-                
+            return await self._direct_chat(messages)
+
         except Exception as e:
             print(f"[Agent] Chat error: {e}")
             import traceback
             traceback.print_exc()
             return f"I encountered an error: {str(e)}"
+
+    # ==============================
+    # Personality (Agent Store) glue
+    # ==============================
+    def _agent_store_root(self) -> Path:
+        return Path(__file__).parent.parent.parent / "agent-store"
+
+    def _adminotaur_dir(self) -> Path:
+        return self._agent_store_root() / "adminotaur"
+
+    def _ensure_adminotaur_downloaded(self) -> None:
+        """Download the Adminotaur personality from Agent Store if missing."""
+        target_dir = self._adminotaur_dir()
+        if target_dir.exists() and (target_dir / "adminotaur.py").exists():
+            return
+
+        repo_url = "https://github.com/decyphertek-io/agent-store"
+        # Convert to codeload ZIP URL (main)
+        try:
+            parsed = urlparse(repo_url)
+            owner, repo = parsed.path.strip("/").split("/")[:2]
+        except Exception:
+            owner, repo = "decyphertek-io", "agent-store"
+        zip_url = f"https://codeload.github.com/{owner}/{repo}/zip/refs/heads/main"
+        print(f"[Agent] Downloading Agent Store ZIP: {zip_url}")
+
+        self._agent_store_root().mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(zip_url, timeout=30) as resp:
+            zip_bytes = resp.read()
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            # Find top directory
+            top_prefix = None
+            for n in zf.namelist():
+                if n.endswith("/") and n.count("/") == 1:
+                    top_prefix = n
+                    break
+            if not top_prefix:
+                top_prefix = zf.namelist()[0].split("/")[0] + "/"
+
+            src_prefix = top_prefix + "adminotaur/"
+            print(f"[Agent] Extracting personality from: {src_prefix}")
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            for member in zf.namelist():
+                if member.startswith(src_prefix) and not member.endswith("/"):
+                    rel = member[len(src_prefix):]
+                    out_path = target_dir / rel
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(member) as src, open(out_path, "wb") as dst:
+                        dst.write(src.read())
+
+    def _load_personality_if_available(self) -> None:
+        """Load AdminotaurAgent if present or downloadable, then wire ai_client/doc_manager."""
+        try:
+            self._ensure_adminotaur_downloaded()
+        except Exception as e:
+            print(f"[Agent] Personality download error: {e}")
+            return
+
+        mod_path = self._adminotaur_dir() / "adminotaur.py"
+        if not mod_path.exists():
+            print("[Agent] Adminotaur personality not found locally")
+            return
+
+        spec = importlib.util.spec_from_file_location("adminotaur", str(mod_path))
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+
+        if not hasattr(module, "AdminotaurAgent"):
+            print("[Agent] AdminotaurAgent class not found in personality module")
+            return
+
+        # Instantiate and pass through important references
+        try:
+            self.personality_agent = module.AdminotaurAgent(main_class=self)
+            # Optionally, expose ai_client/doc_manager to personality if it accepts them
+            if hasattr(self.personality_agent, "ai_client"):
+                self.personality_agent.ai_client = self.ai_client
+            if hasattr(self.personality_agent, "doc_manager"):
+                self.personality_agent.doc_manager = self.doc_manager
+            print("[Agent] Adminotaur personality loaded and ready")
+        except Exception as e:
+            print(f"[Agent] Failed to initialize AdminotaurAgent: {e}")
+
+    # ==================
+    # STORE MANAGEMENT
+    # ==================
+    # Agent Store (remote personalities)
+    def agent_store_registry(self) -> Dict[str, Any]:
+        """Return a minimal registry for Agent Store. Currently supports 'adminotaur'."""
+        return {
+            "agents": {
+                "adminotaur": {
+                    "id": "adminotaur",
+                    "name": "Adminotaur Personality",
+                    "repo_url": "https://github.com/decyphertek-io/agent-store",
+                    "module_path": "adminotaur/adminotaur.py"
+                }
+            }
+        }
+
+    def install_agent_personality(self, agent_id: str = "adminotaur") -> Dict[str, Any]:
+        """Ensure requested personality is downloaded and ready."""
+        try:
+            if agent_id != "adminotaur":
+                return {"success": False, "error": f"Unknown agent: {agent_id}"}
+            self._ensure_adminotaur_downloaded()
+            return {"success": True, "message": f"Agent '{agent_id}' ready"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # MCP Store (servers/skills) — use Adminotaur installer when available
+    def mcp_store_registry_url(self) -> str:
+        return "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/mcp-skills.json"
+
+    def fetch_mcp_registry(self) -> Dict[str, Any]:
+        try:
+            import urllib.request, json as _json
+            with urllib.request.urlopen(self.mcp_store_registry_url(), timeout=20) as resp:
+                data = resp.read()
+            reg = _json.loads(data.decode("utf-8"))
+            return reg if isinstance(reg, dict) else {}
+        except Exception as e:
+            print(f"[Agent] MCP registry fetch error: {e}")
+            # Fallback to local file if exists
+            local = Path(__file__).parent.parent.parent / "mcp-store" / "mcp-skills.json"
+            if local.exists():
+                try:
+                    return json.loads(local.read_text(encoding="utf-8"))
+                except Exception:
+                    return {}
+            return {}
+
+    def install_mcp_server(self, server_id: str) -> Dict[str, Any]:
+        """Install an MCP server via Adminotaur installer if available; otherwise no-op."""
+        try:
+            if self.personality_agent and hasattr(self.personality_agent, "install_server"):
+                reg = None
+                if hasattr(self.personality_agent, "fetch_registry"):
+                    reg = self.personality_agent.fetch_registry()
+                return self.personality_agent.install_server(server_id, registry=reg)
+            return {"success": False, "error": "Personality does not expose MCP installer"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def set_mcp_enabled(self, server_id: str, enabled: bool) -> None:
+        if self.personality_agent and hasattr(self.personality_agent, "set_enabled"):
+            self.personality_agent.set_enabled(server_id, enabled)
+
+    # App Store (local Flet apps)
+    def list_local_apps(self) -> Dict[str, Dict[str, Any]]:
+        return self._discover_flet_apps()
+
+    # RAG Store (documents/indices) — stub hooks for manager role
+    def rag_storage_dir(self) -> Path:
+        return Path.home() / ".decyphertek-ai" / "qdrant"
+
+    def list_rag_resources(self) -> Dict[str, Any]:
+        return {
+            "storage": str(self.rag_storage_dir()),
+            "doc_manager": bool(self.doc_manager)
+        }
     
     def _should_use_tools(self, message: str) -> bool:
         """
