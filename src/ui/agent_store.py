@@ -40,6 +40,19 @@ class AgentStoreView:
         cache = self._read_cache()
         installed = bool(cache.get(default_id, {}).get("installed", False))
         enabled = bool(cache.get(default_id, {}).get("enabled", False))
+        # Reconcile in background to avoid UI-blocking calls
+        def _bg_reconcile():
+            try:
+                si = self.store_manager.is_installed(default_id)
+                se = self.store_manager.is_enabled(default_id)
+                # If cache is stale, update it and refresh UI
+                cur = self._read_cache().get(default_id, {})
+                if cur.get("installed") != si or cur.get("enabled") != se:
+                    self._write_cache_entry(default_id, installed=si, enabled=se)
+                    self._refresh()
+            except Exception:
+                pass
+        threading.Thread(target=_bg_reconcile, daemon=True).start()
 
         def install_default(_):
             if self._is_installing:

@@ -446,60 +446,14 @@ class ChatView:
             print("[Chat] Message complete, UI re-enabled")
 
     def _call_personality_subprocess(self, user_payload: str, rag_context: str | None) -> str:
-        """Invoke enabled personality script in its venv (Chaquopy-style layout).
-
-        Looks for: src/store/agent/<enabled>/adminotaur.py with .venv under that folder.
-        Expects the script to read JSON on stdin and print a JSON with {"text": "..."}.
-        """
+        """Invoke enabled personality script using ChatManager."""
         try:
-            store_root = Path("src/store/agent")
-            agent_id = self._get_enabled_agent_id(store_root) or "adminotaur"
-            agent_dir = store_root / agent_id
-            venv_python = agent_dir / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
-            script_path = agent_dir / "adminotaur.py"
-            if not script_path.exists():
-                return "Agent personality not installed."
-            py_exec = str(venv_python) if venv_python.exists() else "python"
-            payload = {
-                "message": user_payload,
-                "context": rag_context or "",
-                "env": {
-                    "cwd": str(agent_dir)
-                }
-            }
-            proc = subprocess.run(
-                [py_exec, str(script_path)],
-                input=json.dumps(payload).encode("utf-8"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(agent_dir),
-                timeout=60
-            )
-            if proc.returncode != 0:
-                err = proc.stderr.decode("utf-8", errors="ignore")
-                return f"Agent error: {err.strip() or proc.returncode}"
-            out = proc.stdout.decode("utf-8", errors="ignore").strip()
-            try:
-                data = json.loads(out)
-                return data.get("text") or out
-            except Exception:
-                return out
+            from agent.chat_manager import ChatManager
+            chat_manager = ChatManager(page=self.page)
+            return chat_manager.process_agent_command(user_payload, rag_context or "", self.messages)
         except Exception as e:
+            print(f"[Chat] ChatManager error: {e}")
             return f"Agent invocation failed: {e}"
-
-    def _get_enabled_agent_id(self, store_root: Path) -> str | None:
-        """Read src/store/agent/cache.json and return the first installed+enabled agent id."""
-        try:
-            cache_path = store_root / "cache.json"
-            if not cache_path.exists():
-                return None
-            data = json.loads(cache_path.read_text(encoding="utf-8"))
-            for aid, meta in data.items():
-                if isinstance(meta, dict) and meta.get("installed") and meta.get("enabled"):
-                    return aid
-        except Exception:
-            return None
-        return None
     
     def _add_message(self, role: str, content: str, save_to_session: bool = True):
         """Add message to chat display and optionally save to session"""
