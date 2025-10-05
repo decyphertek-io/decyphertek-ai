@@ -31,6 +31,8 @@ from pathlib import Path
 import threading
 from typing import Any, Dict, List, Optional
 import importlib.util
+import subprocess
+import sys
 
 
 class StoreManager:
@@ -171,6 +173,20 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
 
+            # Create local venv and install requirements if present (for Chaquopy-like isolation)
+            venv_dir = dest_dir / ".venv"
+            try:
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                req = dest_dir / "requirements.txt"
+                if req.exists():
+                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+            except Exception as ve:
+                print(f"[StoreManager] Agent venv/setup error for {agent_id}: {ve}")
+
+            # Mark installed in local cache for chat to detect
+            self._write_agent_cache_entry(agent_id, installed=True)
+
             # Enable by default if requested
             if info.get("enable_by_default", False):
                 self.set_enabled(agent_id, True)
@@ -229,6 +245,8 @@ class StoreManager:
     def set_enabled(self, agent_id: str, enabled: bool) -> None:
         self.enabled_state[agent_id] = bool(enabled)
         self._save_enabled_state()
+        # Mirror enabled state into src/store/agent/cache.json for UI/chat discovery
+        self._write_agent_cache_entry(agent_id, enabled=bool(enabled))
 
     # ----------------
     # Dynamic loading
@@ -258,6 +276,27 @@ class StoreManager:
 
         AgentClass = getattr(module, class_name)
         return AgentClass  # caller may instantiate with its own parameters
+
+    # --------------------
+    # Agent cache for UI/chat
+    # --------------------
+    def _write_agent_cache_entry(self, aid: str, installed: bool | None = None, enabled: bool | None = None) -> None:
+        local_root = self.project_root / "src" / "store" / "agent"
+        cache_path = local_root / "cache.json"
+        try:
+            local_root.mkdir(parents=True, exist_ok=True)
+            data: Dict[str, Any] = {}
+            if cache_path.exists():
+                data = json.loads(cache_path.read_text(encoding="utf-8"))
+            entry = data.get(aid, {})
+            if installed is not None:
+                entry["installed"] = bool(installed)
+            if enabled is not None:
+                entry["enabled"] = bool(enabled)
+            data[aid] = entry
+            cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     # -----------------
     # MCP Store methods

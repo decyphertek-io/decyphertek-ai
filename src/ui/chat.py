@@ -397,6 +397,9 @@ class ChatView:
             if user_message.strip().startswith("!agent "):
                 payload = user_message.strip()[7:]
                 response = self._call_personality_subprocess(payload, rag_context)
+                if response in ("Agent personality not installed.", "Agent invocation failed") or response.startswith("Agent error:"):
+                    # Gentle guidance to install/enable from Agents tab
+                    self._add_message("system", "ℹ️ Agent not available. Install and enable one in Agents tab, then try '!agent <task>'.")
             else:
                 # Get response - Always use direct client for chat; agent is separate for tools
                 print("[Chat] Using direct client for chat")
@@ -450,19 +453,7 @@ class ChatView:
         """
         try:
             store_root = Path("src/store/agent")
-            # Determine enabled agent from local cache (no store manager usage)
-            cache_path = store_root / "cache.json"
-            agent_id = "adminotaur"
-            try:
-                if cache_path.exists():
-                    data = json.loads(cache_path.read_text(encoding="utf-8"))
-                    # cache format: {"<id>": {"installed": bool, "enabled": bool}, ...}
-                    for aid, meta in data.items():
-                        if isinstance(meta, dict) and meta.get("installed") and meta.get("enabled"):
-                            agent_id = aid
-                            break
-            except Exception:
-                pass
+            agent_id = self._get_enabled_agent_id(store_root) or "adminotaur"
             agent_dir = store_root / agent_id
             venv_python = agent_dir / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
             script_path = agent_dir / "adminotaur.py"
@@ -495,6 +486,20 @@ class ChatView:
                 return out
         except Exception as e:
             return f"Agent invocation failed: {e}"
+
+    def _get_enabled_agent_id(self, store_root: Path) -> str | None:
+        """Read src/store/agent/cache.json and return the first installed+enabled agent id."""
+        try:
+            cache_path = store_root / "cache.json"
+            if not cache_path.exists():
+                return None
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+            for aid, meta in data.items():
+                if isinstance(meta, dict) and meta.get("installed") and meta.get("enabled"):
+                    return aid
+        except Exception:
+            return None
+        return None
     
     def _add_message(self, role: str, content: str, save_to_session: bool = True):
         """Add message to chat display and optionally save to session"""
