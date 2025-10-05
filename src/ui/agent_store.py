@@ -1,4 +1,7 @@
 import flet as ft
+from pathlib import Path
+import json
+import threading
 from agent.store_manager import StoreManager
 
 
@@ -15,56 +18,70 @@ class AgentStoreView:
         self.page = page
         self.store_manager = store_manager or StoreManager()
         self._init_started = False
+        self._is_installing = False
+        # Local cache path (no blocking reads; tiny JSON)
+        self._cache_path = Path(__file__).resolve().parents[2] / "src" / "store" / "agent" / "cache.json"
 
     def build(self) -> ft.Control:
         # Background registry fetch once; never block UI
         if not self._init_started:
             self._init_started = True
-            import threading
-
             def _bg_fetch():
                 try:
                     self.store_manager.fetch_registry()
                 except Exception as e:
                     print(f"[AgentStore] Registry fetch error: {e}")
-                # Trigger UI refresh if this view is still visible
-                try:
-                    self.page.update()
-                except Exception:
-                    pass
-
+                self._refresh()
             threading.Thread(target=_bg_fetch, daemon=True).start()
 
         # Render from local state only
         default_id = "adminotaur"
-        try:
-            installed = self.store_manager.is_installed(default_id)
-            enabled = self.store_manager.is_enabled(default_id)
-        except Exception:
-            installed = False
-            enabled = False
+        # Load from cache first for instant UI
+        cache = self._read_cache()
+        installed = bool(cache.get(default_id, {}).get("installed", False))
+        enabled = bool(cache.get(default_id, {}).get("enabled", False))
+        # Fallback to fast local checks if cache empty
+        if not installed:
+            try:
+                installed = self.store_manager.is_installed(default_id)
+            except Exception:
+                installed = False
+        if not enabled:
+            try:
+                enabled = self.store_manager.is_enabled(default_id)
+            except Exception:
+                enabled = False
 
         def install_default(_):
-            res = self.store_manager.install_agent(default_id)
+            if self._is_installing:
+                return
+            self._is_installing = True
             self._refresh()
+
+            def _bg_install():
+                try:
+                    res = self.store_manager.install_agent(default_id)
+                    # Update cache immediately
+                    self._write_cache_entry(default_id, installed=True, enabled=self.store_manager.is_enabled(default_id))
+                except Exception as e:
+                    print(f"[AgentStore] Install error: {e}")
+                finally:
+                    self._is_installing = False
+                    self._refresh()
+
+            threading.Thread(target=_bg_install, daemon=True).start()
 
         def toggle_enabled(agent_id: str, enabled_val: bool):
             self.store_manager.set_enabled(agent_id, enabled_val)
             self._refresh()
 
         # Build action controls per state
-        if installed:
-            action = ft.Switch(
-                value=enabled,
-                on_change=lambda e: toggle_enabled(default_id, e.control.value),
-                tooltip="Enable/Disable",
-            )
+        if self._is_installing:
+            action = ft.ProgressRing(width=20, height=20)
+        elif installed:
+            action = ft.Switch(value=enabled, on_change=lambda e: toggle_enabled(default_id, e.control.value), tooltip="Enable/Disable")
         else:
-            action = ft.IconButton(
-                icon=ft.icons.DOWNLOAD,
-                tooltip="Install",
-                on_click=install_default,
-            )
+            action = ft.IconButton(icon=ft.icons.DOWNLOAD, tooltip="Install", on_click=install_default)
 
         # + button bottom-left to add custom store URL
         add_store_fab = ft.IconButton(
@@ -164,11 +181,36 @@ class AgentStoreView:
         self.page.update()
 
     def _refresh(self):
-        # Rebuild this view in-place
+        # Rebuild this view in-place immediately
+        self.page.update()
+
+    # ---------------
+    # Local cache I/O
+    # ---------------
+    def _read_cache(self) -> dict:
         try:
-            parent = self.page
-            parent.update()
+            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            if self._cache_path.exists():
+                return json.loads(self._cache_path.read_text(encoding="utf-8"))
         except Exception:
             pass
+        return {}
+
+    def _write_cache(self, data: dict) -> None:
+        try:
+            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self._cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _write_cache_entry(self, agent_id: str, installed: bool | None = None, enabled: bool | None = None) -> None:
+        data = self._read_cache()
+        entry = data.get(agent_id, {})
+        if installed is not None:
+            entry["installed"] = installed
+        if enabled is not None:
+            entry["enabled"] = enabled
+        data[agent_id] = entry
+        self._write_cache(data)
 
 
