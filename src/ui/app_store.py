@@ -3,6 +3,9 @@ import flet as ft
 from pathlib import Path
 import json
 import threading
+import subprocess
+import sys
+import os
 from utils.logger import setup_logger
 from agent.store_manager import StoreManager
 
@@ -20,6 +23,7 @@ class AdminView:
         self.cache_path = Path("src/store/app/cache.json")
         self.local_root = Path("src/store/app")
         self.apps = self._load_cache()
+        self.running_apps = {}  # Track running app processes
         self._ensure_background_sync()
 
     def _load_cache(self):
@@ -172,6 +176,13 @@ class AdminView:
                                         on_click=lambda _, a=app: self._on_download(a),
                                         visible=not app.get("installed", False),
                                     ),
+                                    ft.IconButton(
+                                        icon=ft.icons.PLAY_ARROW,
+                                        tooltip="Launch App",
+                                        on_click=lambda _, a=app: self._on_launch(a),
+                                        visible=app.get("installed", False) and app.get("enabled", False),
+                                        icon_color=ft.colors.GREEN_600,
+                                    ),
                                     ft.Switch(
                                         value=app.get("enabled", False),
                                         on_change=lambda e, a=app: self._on_toggle_enabled(a, e.control.value),
@@ -225,6 +236,115 @@ class AdminView:
             self.page.update()
         except Exception as e:
             self._show_error(f"Toggle failed: {e}")
+    
+    def _on_launch(self, app: dict):
+        """Launch a Flet app within the app window"""
+        app_id = app.get("id") or app.get("name")
+        if not app_id:
+            return
+        
+        self._show_success(f"Launching {app_id}...")
+        
+        def _launch_app():
+            try:
+                # Get the app installation path
+                app_path = self.local_root / app_id
+                if not app_path.exists():
+                    self._show_error(f"App {app_id} not found at {app_path}")
+                    return
+                
+                # Find the main.py file
+                main_py = app_path / "src" / "main.py"
+                if not main_py.exists():
+                    # Try alternative paths
+                    main_py = app_path / "main.py"
+                    if not main_py.exists():
+                        self._show_error(f"main.py not found for {app_id}")
+                        return
+                
+                # Launch the app in a new window
+                self._launch_flet_app(app_id, main_py)
+                
+            except Exception as e:
+                self._show_error(f"Launch failed: {e}")
+        
+        threading.Thread(target=_launch_app, daemon=True).start()
+    
+    def _launch_flet_app(self, app_id: str, main_py_path: Path):
+        """Launch a Flet app in a new window"""
+        try:
+            # Check if app is already running
+            if app_id in self.running_apps:
+                self._show_error(f"{app_id} is already running")
+                return
+            
+            # Create a new Flet app window
+            app_window = FletAppWindow(app_id, main_py_path, self.page, self)
+            app_window.show()
+            
+            # Track the running app
+            self.running_apps[app_id] = app_window
+            
+        except Exception as e:
+            self._show_error(f"Failed to create app window: {e}")
+
+
+class FletAppWindow:
+    """Container for running Flet apps within the main application"""
+    
+    def __init__(self, app_id: str, main_py_path: Path, parent_page: ft.Page, parent_view=None):
+        self.app_id = app_id
+        self.main_py_path = main_py_path
+        self.parent_page = parent_page
+        self.parent_view = parent_view  # Reference to AdminView for cleanup
+        self.app_process = None
+        self.app_page = None
+        
+    def show(self):
+        """Show the app in a new window or embedded view"""
+        try:
+            # For now, launch in a new process
+            # In the future, this could be embedded in the main UI
+            self._launch_external()
+            
+        except Exception as e:
+            print(f"Error launching {self.app_id}: {e}")
+    
+    def _launch_external(self):
+        """Launch the app in a separate process"""
+        try:
+            # Change to the app directory
+            app_dir = self.main_py_path.parent
+            
+            # Launch the Flet app
+            cmd = [sys.executable, "-m", "flet", "run", str(self.main_py_path)]
+            
+            self.app_process = subprocess.Popen(
+                cmd,
+                cwd=app_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            print(f"Launched {self.app_id} with PID {self.app_process.pid}")
+            
+        except Exception as e:
+            print(f"Failed to launch {self.app_id}: {e}")
+    
+    def close(self):
+        """Close the app"""
+        if self.app_process:
+            try:
+                self.app_process.terminate()
+                self.app_process.wait(timeout=5)
+            except:
+                self.app_process.kill()
+            self.app_process = None
+        
+        # Remove from parent view tracking
+        if self.parent_view and self.app_id in self.parent_view.running_apps:
+            del self.parent_view.running_apps[self.app_id]
     
     # Removed per remote-registry design; configuration handled by apps themselves
     
