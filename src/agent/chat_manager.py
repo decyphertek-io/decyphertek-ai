@@ -360,6 +360,11 @@ class ChatManager:
             print(f"[ChatManager] App status command detected")
             return self._get_app_status_report()
         
+        # RAG status check command - delegate to adminotaur agent
+        if user_message.strip() == "sudo systemctl status rag":
+            print(f"[ChatManager] RAG status command detected - delegating to adminotaur")
+            return self._call_adminotaur_agent(user_message)
+        
         # Specific agent test command
         if user_message.strip() == "sudo systemctl status agent-adminotaur":
             print(f"[ChatManager] Adminotaur agent test command detected")

@@ -9,6 +9,7 @@ def launch_admin_guide(chat_view):
 
 ## System Health Checks
 - `health-check` - Comprehensive system health check via adminotaur.py
+- `sudo systemctl status all` - Complete system status with all components and detailed logs
 - `verbose` - Detailed verbose system status from Chat Manager
 - `!debug` - Debug information from Chat Manager
 
@@ -17,6 +18,7 @@ def launch_admin_guide(chat_view):
 - `sudo systemctl status agent` - Agent status report
 - `sudo systemctl status mcp` - MCP servers status report
 - `sudo systemctl status app` - Apps status report
+- `sudo systemctl status rag` - RAG system status report
 - `sudo systemctl status agent-adminotaur` - Test adminotaur agent
 - `sudo systemctl status mcp-web-search` - Test web-search MCP server
 
