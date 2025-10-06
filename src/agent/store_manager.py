@@ -229,7 +229,7 @@ class StoreManager:
             venv_dir = dest_dir / ".venv"
             try:
                 print(f"[StoreManager] Creating new .venv for {server_id}")
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir), "--upgrade-deps"], check=False, capture_output=True, text=True)
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                 req = dest_dir / "requirements.txt"
                 if req.exists():
