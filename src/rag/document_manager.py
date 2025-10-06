@@ -59,6 +59,22 @@ class DocumentManager:
         except Exception as e:
             print(f"[DocumentManager] Error initializing collection: {e}")
     
+    def _load_documents(self) -> dict:
+        """Load document metadata from documents.json"""
+        try:
+            if self.docs_file.exists():
+                with open(self.docs_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                return {}
+        except Exception as e:
+            print(f"[DocumentManager] Error loading documents: {e}")
+            return {}
+    
+    def get_documents(self) -> dict:
+        """Get all document metadata"""
+        return self.documents
+    
     def set_api_key(self, api_key: str):
         """Update OpenRouter API key"""
         self.api_key = api_key
@@ -92,10 +108,16 @@ class DocumentManager:
                 )
                 
                 if response.status_code == 200:
-                    data = response.json()
-                    return data['data'][0]['embedding']
+                    try:
+                        data = response.json()
+                        return data['data'][0]['embedding']
+                    except Exception as json_error:
+                        print(f"[DocumentManager] JSON parsing error: {json_error}")
+                        print(f"[DocumentManager] Response content: {response.text[:200]}")
+                        return None
                 else:
                     print(f"[DocumentManager] Embedding API error: {response.status_code}")
+                    print(f"[DocumentManager] Response content: {response.text[:200]}")
                     return None
                     
         except Exception as e:
@@ -115,21 +137,39 @@ class DocumentManager:
             True if successful
         """
         try:
-            # Generate document ID from content hash + timestamp to avoid duplicates
+            # Use original filename as doc_id, but handle conflicts
             import time
             timestamp = int(time.time() * 1000)
-            content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
-            doc_id = f"{content_hash}_{timestamp}"
+            doc_id = filename
             
-            # Check if already exists (now with timestamp, this should be unique)
-            print(f"[DocumentManager] Generated doc_id: {doc_id}")
+            # Check if filename already exists and handle conflicts
+            if doc_id in self.documents:
+                # Check if it's the same content by comparing file sizes and content
+                existing_doc = self.documents[doc_id]
+                existing_file_path = Path(existing_doc.get("file_path", ""))
+                
+                if existing_file_path.exists():
+                    existing_size = existing_file_path.stat().st_size
+                    if existing_size == len(content):
+                        # Same size, check if content is identical
+                        existing_content = existing_file_path.read_text(encoding="utf-8")
+                        if existing_content == content:
+                            print(f"[DocumentManager] Document {filename} already exists with identical content")
+                            return False
+                
+                # Different content, create unique filename
+                name_parts = filename.rsplit('.', 1)
+                if len(name_parts) == 2:
+                    base_name, extension = name_parts
+                    doc_id = f"{base_name}_{timestamp}.{extension}"
+                else:
+                    doc_id = f"{filename}_{timestamp}"
+                
+                print(f"[DocumentManager] Filename conflict detected, using: {doc_id}")
+            
+            print(f"[DocumentManager] Using doc_id: {doc_id}")
             print(f"[DocumentManager] Current documents count: {len(self.documents)}")
             print(f"[DocumentManager] Current document IDs: {list(self.documents.keys())}")
-            
-            if doc_id in self.documents:
-                print(f"[DocumentManager] Document {filename} already exists (ID: {doc_id})")
-                print(f"[DocumentManager] Existing document info: {self.documents[doc_id]}")
-                return False
             
             # Split content into chunks
             chunks = self._chunk_text(content)
@@ -140,7 +180,7 @@ class DocumentManager:
                 print(f"[DocumentManager] No OpenRouter API key available - cannot generate embeddings")
                 print(f"[DocumentManager] Document {filename} will be stored but not indexed for search")
                 # Store document without embeddings
-                doc_file_path = self.docs_storage_dir / f"{doc_id}.txt"
+                doc_file_path = self.docs_storage_dir / filename
                 doc_file_path.write_text(content, encoding="utf-8")
                 
                 # Store document metadata
@@ -181,34 +221,48 @@ class DocumentManager:
                 points.append(point)
             
             # Add to Qdrant
+            # Store document content to file with original filename
+            doc_file_path = self.docs_storage_dir / filename
+            doc_file_path.write_text(content, encoding="utf-8")
+            
             if points:
                 self.client.upsert(
                     collection_name="documents",
                     points=points
                 )
                 
-                # Store document content to file
-                doc_file_path = self.docs_storage_dir / f"{doc_id}.txt"
-                doc_file_path.write_text(content, encoding="utf-8")
-                
-                # Store document metadata
+                # Store document metadata with embeddings
                 self.documents[doc_id] = {
                     "filename": filename,
                     "source": source,
                     "chunks": len(chunks),
                     "size": len(content),
                     "file_path": str(doc_file_path),
-                    "created_at": timestamp
+                    "created_at": timestamp,
+                    "indexed": True,
+                    "embedded_chunks": len(points)
                 }
-                self._save_documents()
                 
                 print(f"[DocumentManager] Added {filename} with {len(points)} chunks (ID: {doc_id})")
-                print(f"[DocumentManager] Total documents now: {len(self.documents)}")
-                print(f"[DocumentManager] Document metadata: {self.documents[doc_id]}")
-                return True
             else:
-                print(f"[DocumentManager] No chunks embedded for {filename}")
-                return False
+                # Store document metadata without embeddings
+                self.documents[doc_id] = {
+                    "filename": filename,
+                    "source": source,
+                    "chunks": len(chunks),
+                    "size": len(content),
+                    "file_path": str(doc_file_path),
+                    "created_at": timestamp,
+                    "indexed": False,
+                    "reason": "Embedding generation failed"
+                }
+                
+                print(f"[DocumentManager] Added {filename} without embeddings (ID: {doc_id})")
+            
+            self._save_documents()
+            print(f"[DocumentManager] Total documents now: {len(self.documents)}")
+            print(f"[DocumentManager] Document metadata: {self.documents[doc_id]}")
+            return True
             
         except Exception as e:
             print(f"[DocumentManager] Error adding document: {e}")

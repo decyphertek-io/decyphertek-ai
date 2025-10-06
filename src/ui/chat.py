@@ -386,7 +386,7 @@ class ChatView:
             if hasattr(self, 'doc_manager') and self.doc_manager:
                 try:
                     # Add document to DocumentManager (this will store in the right place)
-                    success = self.doc_manager.add_document(content, file.name, source="chat_upload")
+                    success = await self.doc_manager.add_document(content, file.name, source="chat_upload")
                     
                     if success:
                         self._add_message("system", f"✅ Document '{file.name}' uploaded to RAG storage successfully!")
