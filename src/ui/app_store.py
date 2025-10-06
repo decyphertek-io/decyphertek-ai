@@ -20,8 +20,10 @@ class AdminView:
         self.on_back = on_back
         self.store = store_manager or StoreManager()
         self.registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
-        self.cache_path = Path("src/store/app/cache.json")
-        self.local_root = Path("src/store/app")
+        # Use system-level paths
+        self.user_home = Path.home() / ".decyphertek-ai"
+        self.cache_path = self.user_home / "store" / "app" / "cache.json"
+        self.local_root = self.user_home / "store" / "app"
         self.apps = self._load_cache()
         self.running_apps = {}  # Track running app processes
         self._ensure_background_sync()

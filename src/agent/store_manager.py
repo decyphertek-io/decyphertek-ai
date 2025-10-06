@@ -226,50 +226,12 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml")
                 
-                # Set up Poetry environment - replicate launch.sh approach
+                # Use bash script to set up Poetry environment (same approach as launch.sh)
                 print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
+                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
                 
-                # Set environment variables exactly like launch.sh
-                env = os.environ.copy()
-                env["POETRY_VIRTUALENVS_PATH"] = str(dest_dir)
-                env["POETRY_VIRTUALENVS_IN_PROJECT"] = "false"
-                env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
-                
-                # Configure Poetry to use this directory for venv
-                subprocess.run(
-                    ["poetry", "config", "virtualenvs.path", str(dest_dir)],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Generate poetry.lock
-                print(f"[StoreManager] Generating poetry.lock...")
-                subprocess.run(
-                    ["poetry", "lock"],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Create venv explicitly
-                print(f"[StoreManager] Creating virtual environment...")
-                subprocess.run(
-                    ["poetry", "env", "use", "python3"],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Install dependencies
-                print(f"[StoreManager] Installing dependencies...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root"],
-                    cwd=str(dest_dir),
-                    env=env,
+                    [str(script_path), str(dest_dir)],
                     check=False,
                     capture_output=True,
                     text=True
@@ -393,50 +355,12 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml with dependencies from requirements.txt")
                 
-                # Set up Poetry environment - replicate launch.sh approach
+                # Use bash script to set up Poetry environment (same approach as launch.sh)
                 print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
+                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
                 
-                # Set environment variables exactly like launch.sh
-                env = os.environ.copy()
-                env["POETRY_VIRTUALENVS_PATH"] = str(dest_dir)
-                env["POETRY_VIRTUALENVS_IN_PROJECT"] = "false"
-                env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
-                
-                # Configure Poetry to use this directory for venv
-                subprocess.run(
-                    ["poetry", "config", "virtualenvs.path", str(dest_dir)],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Generate poetry.lock
-                print(f"[StoreManager] Generating poetry.lock...")
-                subprocess.run(
-                    ["poetry", "lock"],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Create venv explicitly
-                print(f"[StoreManager] Creating virtual environment...")
-                subprocess.run(
-                    ["poetry", "env", "use", "python3"],
-                    cwd=str(dest_dir),
-                    env=env,
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Install dependencies
-                print(f"[StoreManager] Installing dependencies...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root"],
-                    cwd=str(dest_dir),
-                    env=env,
+                    [str(script_path), str(dest_dir)],
                     check=False,
                     capture_output=True,
                     text=True

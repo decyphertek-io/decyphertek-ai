@@ -19,8 +19,8 @@ class AgentStoreView:
         self.store_manager = store_manager or StoreManager()
         self._init_started = False
         self._is_installing = False
-        # Local cache path (no blocking reads; tiny JSON)
-        self._cache_path = Path(__file__).resolve().parents[2] / "src" / "store" / "agent" / "cache.json"
+        # Use system-level cache path
+        self._cache_path = Path.home() / ".decyphertek-ai" / "store" / "agent" / "cache.json"
 
     def build(self) -> ft.Control:
         # Background registry fetch once; never block UI
