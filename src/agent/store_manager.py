@@ -969,10 +969,29 @@ build-backend = "poetry.core.masonry.api"
     def _setup_app_environment(self, app_id: str, dest_dir: Path) -> Dict[str, Any]:
         """Setup the app environment including dependencies"""
         try:
-            # For Chaquopy compatibility, install directly to system Python
-            # instead of creating virtual environments
+            pyproject_file = dest_dir / "pyproject.toml"
             req_file = dest_dir / "requirements.txt"
-            if req_file.exists():
+            
+            # If pyproject.toml exists, use Poetry via bash script
+            if pyproject_file.exists():
+                print(f"[StoreManager] Setting up Poetry environment for app '{app_id}'...")
+                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
+                
+                result = subprocess.run(
+                    [str(script_path), str(dest_dir)],
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+                
+                if result.returncode != 0:
+                    print(f"[StoreManager] Poetry install output:")
+                    print(f"  STDOUT: {result.stdout}")
+                    print(f"  STDERR: {result.stderr}")
+                    return {"success": False, "error": f"Poetry setup failed: {result.stderr}"}
+            
+            # Fallback to requirements.txt for apps without pyproject.toml
+            elif req_file.exists():
                 print(f"[StoreManager] Installing requirements for {app_id}")
                 result = subprocess.run(
                     [sys.executable, "-m", "pip", "install", "-r", str(req_file)],
