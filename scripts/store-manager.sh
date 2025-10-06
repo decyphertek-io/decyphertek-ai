@@ -27,23 +27,15 @@ fi
 
 echo "Setting up Poetry environment in: $COMPONENT_DIR"
 
-# Configure Poetry for this directory (same as launch.sh)
-export POETRY_VIRTUALENVS_PATH="$COMPONENT_DIR"
-export POETRY_VIRTUALENVS_IN_PROJECT=false
+# Configure Poetry to create .venv IN this directory
+export POETRY_VIRTUALENVS_IN_PROJECT=true
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-
-# Set Poetry config
-poetry config virtualenvs.path "$COMPONENT_DIR"
 
 # Generate lock file
 echo "Generating poetry.lock..."
 poetry lock
 
-# Create virtual environment
-echo "Creating virtual environment..."
-poetry env use python3
-
-# Install dependencies
+# Install dependencies (Poetry will auto-create .venv with IN_PROJECT=true)
 echo "Installing dependencies..."
 poetry install --no-root
 
