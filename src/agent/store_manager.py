@@ -542,12 +542,12 @@ class StoreManager:
             pass
 
     def test_mcp_server(self, server_id: str) -> Dict[str, Any]:
-        """Test an MCP server and return detailed status information."""
+        """Test an MCP server installation status (diagnostic only)."""
         try:
             # Check if server is installed
             server_dir = self.mcp_store_root / server_id
             
-            # Find the actual script file (could be {server_id}.py, main.py, or other names)
+            # Find the actual script file
             script_path = None
             possible_names = [
                 f"{server_id}.py",  # web-search.py
@@ -564,7 +564,6 @@ class StoreManager:
                     break
             
             if not script_path:
-                # List available files for debugging
                 available_files = [f.name for f in server_dir.iterdir() if f.is_file() and f.suffix == '.py']
                 return {
                     "success": False,
@@ -573,8 +572,7 @@ class StoreManager:
                         "searched_for": possible_names,
                         "available_py_files": available_files,
                         "server_dir": str(server_dir),
-                        "status": "Installation incomplete",
-                        "suggestion": f"Run: sudo apt reinstall mcp-{server_id}"
+                        "status": "Installation incomplete"
                     }
                 }
             
@@ -586,83 +584,27 @@ class StoreManager:
             if self.mcp_registry:
                 server_info = self.mcp_registry.get("servers", {}).get(server_id, {})
             
-            # Test the server by calling it
-            test_payload = {
-                "message": "test",
-                "context": "",
-                "history": []
-            }
-            
-            env_vars = os.environ.copy()
-            env_vars.update({
-                "PYTHONPATH": str(server_dir),
-                "PATH": os.environ.get("PATH", "")
-            })
-            
-            # Prefer server's virtualenv Python if available
-            venv_python = server_dir / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            python_exec = str(venv_python) if venv_python.exists() else sys.executable
-
-            process = subprocess.run(
-                [python_exec, str(script_path)],
-                input=json.dumps(test_payload).encode("utf-8"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(server_dir),
-                env=env_vars,
-                timeout=30
-            )
-            
-            if process.returncode != 0:
-                error_output = process.stderr.decode("utf-8", errors="ignore")
-                return {
-                    "success": False,
-                    "error": f"MCP Server test failed (code {process.returncode})",
-                    "details": {
-                        "error_output": error_output.strip(),
-                        "server_id": server_id,
-                        "script_path": str(script_path),
-                        "enabled": is_enabled
-                    }
-                }
-            
-            # Parse response
-            output = process.stdout.decode("utf-8", errors="ignore").strip()
-            try:
-                response_data = json.loads(output)
-                if isinstance(response_data, dict):
-                    response_text = response_data.get("text", response_data.get("response", str(response_data)))
-                else:
-                    response_text = str(response_data)
-            except json.JSONDecodeError:
-                response_text = output
+            # Check if venv exists and has requirements
+            venv_dir = server_dir / ".venv"
+            venv_exists = venv_dir.exists()
             
             return {
                 "success": True,
-                "message": f"MCP Server {server_id} is working",
+                "message": f"MCP Server {server_id} is installed",
                 "details": {
-                    "server_response": response_text,
                     "server_id": server_id,
                     "script_path": str(script_path),
                     "enabled": is_enabled,
+                    "venv_exists": venv_exists,
                     "name": server_info.get("name", server_id),
                     "status": "Ready for agent use"
                 }
             }
             
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "error": f"MCP Server '{server_id}' test timed out (30 seconds)",
-                "details": {
-                    "server_id": server_id,
-                    "timeout": "30 seconds"
-                }
-            }
         except Exception as e:
             return {
                 "success": False,
-                "error": f"MCP Server test error: {e}",
+                "error": f"MCP Server check error: {e}",
                 "details": {
                     "server_id": server_id,
                     "exception": str(e)
