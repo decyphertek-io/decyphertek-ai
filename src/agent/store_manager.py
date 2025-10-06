@@ -229,16 +229,34 @@ class StoreManager:
             venv_dir = dest_dir / ".venv"
             try:
                 print(f"[StoreManager] Creating new .venv for {server_id}")
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir), "--upgrade-deps"], check=False, capture_output=True, text=True)
+                venv_result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                if venv_result.returncode != 0:
+                    print(f"[StoreManager] ⚠️ venv creation warning: {venv_result.stderr}")
+                
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                
+                # Ensure pip is up to date
+                print(f"[StoreManager] Upgrading pip in .venv for {server_id}")
+                pip_upgrade = subprocess.run([str(vpy), "-m", "pip", "install", "--upgrade", "pip"], check=False, capture_output=True, text=True)
+                if pip_upgrade.returncode != 0:
+                    print(f"[StoreManager] ⚠️ pip upgrade warning: {pip_upgrade.stderr}")
+                
                 req = dest_dir / "requirements.txt"
                 if req.exists():
                     print(f"[StoreManager] Installing requirements for {server_id} into new .venv")
                     result = subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
                     if result.returncode == 0:
                         print(f"[StoreManager] ✅ Requirements installed successfully for {server_id}")
+                        # Verify installation
+                        verify = subprocess.run([str(vpy), "-m", "pip", "list"], check=False, capture_output=True, text=True)
+                        if "duckduckgo-search" in verify.stdout:
+                            print(f"[StoreManager] ✅ Verified: duckduckgo-search installed")
+                        if "requests" in verify.stdout:
+                            print(f"[StoreManager] ✅ Verified: requests installed")
                     else:
-                        print(f"[StoreManager] ⚠️ Requirements install warning for {server_id}: {result.stderr}")
+                        print(f"[StoreManager] ⚠️ Requirements install warning for {server_id}:")
+                        print(f"[StoreManager] STDERR: {result.stderr}")
+                        print(f"[StoreManager] STDOUT: {result.stdout}")
                 else:
                     print(f"[StoreManager] No requirements.txt found for {server_id}")
             except Exception as ve:
