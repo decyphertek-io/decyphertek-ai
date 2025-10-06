@@ -300,15 +300,19 @@ class StoreManager:
                     "details": f"Available servers: {', '.join(available_servers) if available_servers else 'None'}"
                 }
             
-            # Remove existing installation
+            # Remove existing installation (including .venv)
             server_dir = self.mcp_store_root / server_id
             removed_files = []
             if server_dir.exists():
                 import shutil
                 # List files before removal for feedback
                 removed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
+                # Also remove .venv if it exists
+                venv_dir = server_dir / ".venv"
+                if venv_dir.exists():
+                    removed_files.append(".venv")
                 shutil.rmtree(server_dir)
-                print(f"[StoreManager] Removed existing {server_id} installation")
+                print(f"[StoreManager] Removed existing {server_id} installation (including .venv)")
             
             # Reinstall
             install_result = self.install_mcp_server(server_id)
