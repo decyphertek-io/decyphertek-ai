@@ -6,12 +6,6 @@ authors = ["DecypherTek <admin@decyphertek.io>"]
 readme = "README.md"
 package-mode = false
 
-[tool.poetry.config.virtualenvs]
-in-project = true
-
-[tool.poetry.config.keyring]
-enabled = false
-
 [tool.flet]
 # project display name that is used as an app title on Android and iOS home screens,
 # shown in window titles and about app dialogs on desktop.
