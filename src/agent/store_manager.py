@@ -81,9 +81,24 @@ class StoreManager:
         self.mcp_store_root.mkdir(parents=True, exist_ok=True)
         self.app_local_root.mkdir(parents=True, exist_ok=True)
         
+        # Configure Poetry globally to use in-project venvs
+        self._configure_poetry()
+        
         # Auto-install components with enable_by_default: true
         self._start_agent_background_sync()
         self._start_mcp_background_sync()
+    
+    def _configure_poetry(self) -> None:
+        """Configure Poetry to create .venv in project directories."""
+        try:
+            subprocess.run(
+                ["poetry", "config", "virtualenvs.in-project", "true"],
+                check=False,
+                capture_output=True
+            )
+            print("[StoreManager] Poetry configured to use in-project virtualenvs")
+        except Exception as e:
+            print(f"[StoreManager] Poetry config warning: {e}")
 
     # -------------------
     # Registry management
@@ -226,20 +241,42 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml")
                 
-                # Run poetry install with environment variable to force local .venv
-                print(f"[StoreManager] Running 'poetry install' for agent '{agent_id}'...")
+                # Set up Poetry environment with local .venv
+                print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
                 env = os.environ.copy()
                 env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
                 env["POETRY_VIRTUALENVS_CREATE"] = "true"
                 
+                # First, generate poetry.lock if it doesn't exist
+                lock_file = dest_dir / "poetry.lock"
+                if not lock_file.exists():
+                    print(f"[StoreManager] Generating poetry.lock...")
+                    lock_result = subprocess.run(
+                        ["poetry", "lock", "--no-update"],
+                        cwd=str(dest_dir),
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        env=env
+                    )
+                    if lock_result.returncode != 0:
+                        print(f"[StoreManager] Lock generation output: {lock_result.stderr}")
+                
+                # Now install with local venv
+                print(f"[StoreManager] Running 'poetry install' for agent '{agent_id}'...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root"],
+                    ["poetry", "install", "--no-root", "-vv"],
                     cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
                     text=True,
                     env=env
                 )
+                
+                if result.returncode != 0:
+                    print(f"[StoreManager] Poetry install output:")
+                    print(f"  STDOUT: {result.stdout}")
+                    print(f"  STDERR: {result.stderr}")
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for agent '{agent_id}'")
@@ -314,7 +351,30 @@ build-backend = "poetry.core.masonry.api"
                 
                 if req.exists() and not pyproject.exists():
                     print(f"[StoreManager] Converting requirements.txt to Poetry format...")
-                    # Create basic pyproject.toml
+                    # Parse requirements.txt
+                    requirements = []
+                    for line in req.read_text().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            requirements.append(line)
+                    
+                    # Build dependencies section
+                    deps_lines = ['python = "^3.10"']
+                    for req_line in requirements:
+                        # Convert pip format to poetry format
+                        # e.g., "duckduckgo-search>=8.1.1" -> 'duckduckgo-search = ">=8.1.1"'
+                        if '>=' in req_line:
+                            pkg, ver = req_line.split('>=')
+                            deps_lines.append(f'{pkg.strip()} = ">={ver.strip()}"')
+                        elif '==' in req_line:
+                            pkg, ver = req_line.split('==')
+                            deps_lines.append(f'{pkg.strip()} = "{ver.strip()}"')
+                        else:
+                            deps_lines.append(f'{req_line} = "*"')
+                    
+                    deps_section = '\n'.join(deps_lines)
+                    
+                    # Create pyproject.toml with actual dependencies
                     pyproject_content = f"""[tool.poetry]
 name = "mcp-{server_id}"
 version = "1.0.0"
@@ -322,29 +382,51 @@ description = "MCP Server: {server_id}"
 authors = ["DecypherTek <decyphertek@proton.me>"]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+{deps_section}
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 """
                     pyproject.write_text(pyproject_content)
-                    print(f"[StoreManager] Created pyproject.toml")
+                    print(f"[StoreManager] Created pyproject.toml with dependencies from requirements.txt")
                 
-                # Run poetry install with environment variable to force local .venv
-                print(f"[StoreManager] Running 'poetry install' for MCP server '{server_id}'...")
+                # Set up Poetry environment with local .venv
+                print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
                 env = os.environ.copy()
                 env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
                 env["POETRY_VIRTUALENVS_CREATE"] = "true"
                 
+                # First, generate poetry.lock if it doesn't exist
+                lock_file = dest_dir / "poetry.lock"
+                if not lock_file.exists():
+                    print(f"[StoreManager] Generating poetry.lock...")
+                    lock_result = subprocess.run(
+                        ["poetry", "lock", "--no-update"],
+                        cwd=str(dest_dir),
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        env=env
+                    )
+                    if lock_result.returncode != 0:
+                        print(f"[StoreManager] Lock generation output: {lock_result.stderr}")
+                
+                # Now install with local venv
+                print(f"[StoreManager] Running 'poetry install' for MCP server '{server_id}'...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root"],
+                    ["poetry", "install", "--no-root", "-vv"],
                     cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
                     text=True,
                     env=env
                 )
+                
+                if result.returncode != 0:
+                    print(f"[StoreManager] Poetry install output:")
+                    print(f"  STDOUT: {result.stdout}")
+                    print(f"  STDERR: {result.stderr}")
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for MCP '{server_id}'")
@@ -764,9 +846,26 @@ build-backend = "poetry.core.masonry.api"
             if self.mcp_registry:
                 server_info = self.mcp_registry.get("servers", {}).get(server_id, {})
             
-            # Check if venv exists and has requirements
+            # Check if venv exists and is functional
             venv_dir = server_dir / ".venv"
+            venv_python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             venv_exists = venv_dir.exists()
+            venv_functional = venv_python.exists()
+            
+            # Check if pyproject.toml and poetry.lock exist
+            pyproject_exists = (server_dir / "pyproject.toml").exists()
+            poetry_lock_exists = (server_dir / "poetry.lock").exists()
+            
+            # Determine status
+            if not venv_exists:
+                status = "❌ No .venv - Poetry install failed"
+                ready = False
+            elif not venv_functional:
+                status = "⚠️ .venv exists but Python not found"
+                ready = False
+            else:
+                status = "✅ Ready (venv configured)"
+                ready = True
             
             return {
                 "success": True,
@@ -776,8 +875,13 @@ build-backend = "poetry.core.masonry.api"
                     "script_path": str(script_path),
                     "enabled": is_enabled,
                     "venv_exists": venv_exists,
+                    "venv_functional": venv_functional,
+                    "venv_python": str(venv_python) if venv_functional else "Not found",
+                    "pyproject_exists": pyproject_exists,
+                    "poetry_lock_exists": poetry_lock_exists,
                     "name": server_info.get("name", server_id),
-                    "status": "Ready for agent use"
+                    "status": status,
+                    "ready": ready
                 }
             }
             

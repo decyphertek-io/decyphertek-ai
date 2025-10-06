@@ -926,14 +926,27 @@ class ChatManager:
                 name = details.get("name", server_id)
                 script_path = details.get("script_path", "Unknown")
                 enabled = details.get("enabled", False)
+                venv_exists = details.get("venv_exists", False)
+                venv_functional = details.get("venv_functional", False)
+                venv_python = details.get("venv_python", "Not found")
+                pyproject_exists = details.get("pyproject_exists", False)
+                poetry_lock_exists = details.get("poetry_lock_exists", False)
+                ready = details.get("ready", False)
                 
-                response = f"**Store Manager:** ✅ **{result.get('message', 'MCP Server is working')}**\n\n"
-                response += f"**Server Response:** {server_response}\n\n"
-                response += f"**Server ID:** {server_id}\n"
-                response += f"**Name:** {name}\n"
-                response += f"**Script Path:** {script_path}\n"
-                response += f"**Enabled:** {'Yes' if enabled else 'No'}\n"
-                response += f"**Status:** {details.get('status', 'Ready for agent use')}"
+                response = f"**Store Manager:** {'✅' if ready else '⚠️'} **{result.get('message', 'MCP Server is installed')}**\n\n"
+                response += f"**Status:** {details.get('status', 'Unknown')}\n\n"
+                response += f"**Environment:**\n"
+                response += f"  • .venv exists: {'✅' if venv_exists else '❌'}\n"
+                response += f"  • Python functional: {'✅' if venv_functional else '❌'}\n"
+                response += f"  • Python path: `{venv_python}`\n"
+                response += f"  • pyproject.toml: {'✅' if pyproject_exists else '❌'}\n"
+                response += f"  • poetry.lock: {'✅' if poetry_lock_exists else '❌'}\n\n"
+                response += f"**Server Details:**\n"
+                response += f"  • ID: {server_id}\n"
+                response += f"  • Name: {name}\n"
+                response += f"  • Script: `{script_path}`\n"
+                response += f"  • Enabled: {'Yes' if enabled else 'No'}\n"
+                response += f"  • Ready: {'Yes ✅' if ready else 'No ❌'}"
                 
                 return response
             else:
