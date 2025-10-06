@@ -114,6 +114,14 @@ class ChatView:
             on_click=self._on_docs_click
         )
         
+        # Terminal button (terminal icon for command line access)
+        self.terminal_button = ft.IconButton(
+            icon=ft.icons.TERMINAL,
+            icon_color=ft.colors.GREEN,
+            tooltip="Terminal Emulator",
+            on_click=self._on_terminal_click
+        )
+        
         # Build sidebar
         self.sidebar = self._build_sidebar()
         
@@ -237,6 +245,8 @@ class ChatView:
                                     ),
                                     # Docs button (paper icon for troubleshooting notes)
                                     self.docs_button,
+                                    # Terminal button (terminal icon for command line access)
+                                    self.terminal_button,
                                     self.input_field,
                                     self.send_button
                                 ],
@@ -296,6 +306,30 @@ class ChatView:
                 )
             )
     
+    def _on_terminal_click(self, e):
+        """Handle terminal button click - launch terminal emulator"""
+        print("[Chat] Terminal button clicked - launching terminal!")
+        try:
+            if self.editor_open:
+                # Close any open docs if already open
+                print("[Chat] Terminal already open, closing it")
+                self._close_editor()
+                return
+            
+            # Launch terminal
+            from ui.terminal import launch_terminal
+            launch_terminal(self)
+            self.editor_open = True
+            
+        except Exception as ex:
+            print(f"[Chat] Error launching terminal: {ex}")
+            self.page.show_snack_bar(
+                ft.SnackBar(
+                    content=ft.Text(f"Error opening terminal: {ex}"),
+                    bgcolor=ft.colors.RED
+                )
+            )
+    
     def _close_editor(self):
         """Close any open docs (editor, admin guide, docs viewer, or menu)"""
         try:
@@ -304,7 +338,8 @@ class ChatView:
                                       if not (hasattr(control, 'editor_container') or 
                                              hasattr(control, 'admin_guide_container') or
                                              hasattr(control, 'docs_viewer_container') or
-                                             hasattr(control, 'docs_menu_container'))]
+                                             hasattr(control, 'docs_menu_container') or
+                                             hasattr(control, 'terminal_container'))]
             self.editor_open = False
             self.page.update()
             print("[Chat] Docs closed")

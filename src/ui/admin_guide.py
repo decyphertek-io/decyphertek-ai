@@ -68,7 +68,7 @@ def launch_admin_guide(chat_view):
                             ft.Row(
                                 controls=[
                                     ft.Text("🔧 ADMIN DIAGNOSTIC GUIDE", 
-                                           size=16, weight=ft.FontWeight.BOLD, color=ft.colors.CYAN_400,
+                                           size=18, weight=ft.FontWeight.BOLD, color=ft.colors.GREEN_400,
                                            font_family="monospace"),
                                     ft.Container(expand=True),  # Spacer
                                     ft.IconButton(
@@ -81,13 +81,13 @@ def launch_admin_guide(chat_view):
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN
                             ),
                             ft.Text("System diagnostic commands and troubleshooting guide", 
-                                   size=10, color=ft.colors.CYAN_300, font_family="monospace")
+                                   size=12, color=ft.colors.GREEN_300, font_family="monospace")
                         ],
                         spacing=5
                     ),
                     bgcolor=ft.colors.BLACK,
                     padding=10,
-                    border=ft.border.all(1, ft.colors.CYAN_400),
+                    border=ft.border.all(1, ft.colors.GREEN_400),
                     border_radius=ft.border_radius.only(
                         top_left=10, top_right=10
                     )
@@ -98,21 +98,21 @@ def launch_admin_guide(chat_view):
                     content=ft.Column(
                         controls=[
                             ft.Text("📄 Diagnostic Commands (Read-Only)", 
-                                   weight=ft.FontWeight.BOLD, size=12, color=ft.colors.CYAN_400,
+                                   weight=ft.FontWeight.BOLD, size=14, color=ft.colors.GREEN_400,
                                    font_family="monospace"),
                             ft.TextField(
                                 value=admin_content,
                                 read_only=True,
                                 multiline=True,
-                                min_lines=25,
-                                max_lines=25,
-                                border_color=ft.colors.CYAN_400,
+                                min_lines=35,
+                                max_lines=35,
+                                border_color=ft.colors.GREEN_400,
                                 bgcolor=ft.colors.BLACK,
-                                color=ft.colors.CYAN_300,
+                                color=ft.colors.GREEN_300,
                                 text_style=ft.TextStyle(
                                     font_family="monospace",
-                                    size=11,
-                                    color=ft.colors.CYAN_300
+                                    size=13,
+                                    color=ft.colors.GREEN_300
                                 )
                             ),
                         ],
@@ -120,7 +120,7 @@ def launch_admin_guide(chat_view):
                     ),
                     padding=10,
                     bgcolor=ft.colors.BLACK,
-                    border=ft.border.all(1, ft.colors.CYAN_400),
+                    border=ft.border.all(1, ft.colors.GREEN_400),
                     border_radius=ft.border_radius.only(
                         bottom_left=10, bottom_right=10
                     )
@@ -131,16 +131,16 @@ def launch_admin_guide(chat_view):
         ),
         # Static framing within chat window with Tron theme
         width=chat_view.chat_list.width if hasattr(chat_view.chat_list, 'width') else None,
-        height=500,  # Fixed height to fit within chat window
+        height=min(700, chat_view.page.height - 200) if hasattr(chat_view.page, 'height') and chat_view.page.height else 600,  # Dynamic height based on available space
         bgcolor=ft.colors.BLACK,
-        border=ft.border.all(2, ft.colors.CYAN_400),
+        border=ft.border.all(2, ft.colors.GREEN_400),
         border_radius=10,
         margin=ft.margin.all(5),  # Minimal margin
         # Add subtle glow effect with shadow
         shadow=ft.BoxShadow(
             spread_radius=1,
             blur_radius=10,
-            color=ft.colors.with_opacity(0.3, ft.colors.CYAN_400),
+            color=ft.colors.with_opacity(0.3, ft.colors.GREEN_400),
             offset=ft.Offset(0, 0)
         )
     )

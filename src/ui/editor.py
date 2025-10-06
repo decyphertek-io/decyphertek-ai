@@ -9,63 +9,45 @@ import os
 def launch_editor(chat_view):
     """Launch integrated text editor within the chat window"""
     
-    # Create admin.txt content (now just a placeholder)
-    admin_content = """# 📝 Quick Notes Reference
-
-This is your personal notes editor. Use the Admin Guide for system diagnostic commands.
-
-## Quick Tips:
-- Type your notes here
-- Use the toolbar buttons to save, open files, or create folders
-- Adminotaur can read and write to these notes
-- All notes are saved automatically when you use the SAVE button
-
----
-**Note:** For system diagnostic commands, use the Admin Guide from the Docs Menu."""
-
     # Set up file paths
     notes_dir = Path.home() / ".decyphertek-ai" / "notes"
     notes_dir.mkdir(parents=True, exist_ok=True)
     
-    admin_file = notes_dir / "admin.txt"
     quicknotes_file = notes_dir / "quicknotes.md"
     
-    # Create admin.txt if it doesn't exist
-    if not admin_file.exists():
-        admin_file.write_text(admin_content, encoding="utf-8")
-    
-    # Load quicknotes content
+    # Load quicknotes content or create welcome message
     quicknotes_content = ""
     if quicknotes_file.exists():
         try:
             quicknotes_content = quicknotes_file.read_text(encoding="utf-8")
         except Exception:
             quicknotes_content = ""
+    else:
+        # Create welcome message for new users
+        welcome_content = """# 📝 Welcome to the Text Editor
+
+This is your personal notes editor with a cyberpunk theme.
+
+## Quick Tips:
+- Type your notes here
+- Use the toolbar buttons to save, open files, or create folders
+- Adminotaur can read and write to these notes
+- All notes are saved when you use the SAVE button
+
+---
+**Note:** For system diagnostic commands, use the Admin Guide from the Docs Menu."""
+        quicknotes_file.write_text(welcome_content, encoding="utf-8")
+        quicknotes_content = welcome_content
     
     # Create editor components
     
-    # Create vim-style text fields with Tron cyberpunk theme
-    admin_field = ft.TextField(
-        value=admin_content,
-        read_only=True,
-        multiline=True,
-        min_lines=12,
-        max_lines=12,
-        border_color=ft.colors.CYAN_400,
-        bgcolor=ft.colors.BLACK,
-        color=ft.colors.CYAN_300,
-        text_style=ft.TextStyle(
-            font_family="monospace",
-            size=11,
-            color=ft.colors.CYAN_300
-        )
-    )
+    # Create text field with Tron cyberpunk theme
     
     quicknotes_field = ft.TextField(
         value=quicknotes_content,
         multiline=True,
-        min_lines=20,
-        max_lines=20,
+        min_lines=35,
+        max_lines=35,
         hint_text="Type your notes here... Modern text editor",
         border_color=ft.colors.CYAN_400,
         bgcolor=ft.colors.BLACK,
@@ -264,31 +246,6 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
                     )
                 ),
                 
-                # Admin commands section with Tron theme
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Text("📄 admin.txt (Read-Only Reference)", 
-                                   weight=ft.FontWeight.BOLD, size=12, color=ft.colors.CYAN_400,
-                                   font_family="monospace"),
-                            admin_field,
-                        ],
-                        spacing=5
-                    ),
-                    padding=10,
-                    bgcolor=ft.colors.BLACK,
-                    border=ft.border.all(1, ft.colors.CYAN_400)
-                ),
-                
-                # Tron-style divider
-                ft.Container(
-                    content=ft.Text("═══════════════════════════════════════════════════════════════", 
-                                   color=ft.colors.CYAN_400, font_family="monospace", size=10),
-                    alignment=ft.alignment.center,
-                    padding=5,
-                    bgcolor=ft.colors.BLACK
-                ),
-                
                 # Modern Tron-style text editor section
                 ft.Container(
                     content=ft.Column(
@@ -365,7 +322,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
         ),
         # Static framing within chat window with Tron theme
         width=chat_view.chat_list.width if hasattr(chat_view.chat_list, 'width') else None,
-        height=600,  # Fixed height to fit within chat window
+        height=min(700, chat_view.page.height - 200) if hasattr(chat_view.page, 'height') and chat_view.page.height else 600,  # Dynamic height based on available space
         bgcolor=ft.colors.BLACK,
         border=ft.border.all(2, ft.colors.CYAN_400),
         border_radius=10,
