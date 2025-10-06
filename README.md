@@ -9,18 +9,14 @@ A modern AI assistant with chat, document management, and app integration capabi
 - **Document Management** - Upload and search through your documents with RAG
 - **App Store** - Launch and manage Flet applications
 - **MCP Servers** - Modular Python servers for web search, file management, and more
-- **Mobile Ready** - Works on desktop and mobile platforms
 
 ## Quick Start
 
 1. **Install Dependencies**
 ```bash
    # Using Poetry (recommended)
-   curl -sSL https://install.python-poetry.org | python3 -
-poetry install
-
-   # Or using pip
-   pip install -r requirements.txt
+   bash -c "$(curl -sSL https://install.python-poetry.org)"
+   poetry install
    ```
 
 2. **Launch the App**
