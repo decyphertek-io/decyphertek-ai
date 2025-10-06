@@ -273,40 +273,43 @@ class ChatView:
         )
     
     def _on_docs_click(self, e):
-        """Handle docs button click - launch integrated text editor"""
-        print("[Chat] Docs button clicked - launching editor!")
+        """Handle docs button click - launch docs menu"""
+        print("[Chat] Docs button clicked - launching docs menu!")
         try:
             if self.editor_open:
-                # Close editor if already open
-                print("[Chat] Editor already open, closing it")
+                # Close any open docs if already open
+                print("[Chat] Docs already open, closing them")
                 self._close_editor()
                 return
             
-            # Launch editor
-            from ui.editor import launch_editor
-            launch_editor(self)
+            # Launch docs menu
+            from ui.docs_menu import launch_docs_menu
+            launch_docs_menu(self)
             self.editor_open = True
             
         except Exception as ex:
-            print(f"[Chat] Error launching editor: {ex}")
+            print(f"[Chat] Error launching docs menu: {ex}")
             self.page.show_snack_bar(
                 ft.SnackBar(
-                    content=ft.Text(f"Error opening editor: {ex}"),
+                    content=ft.Text(f"Error opening docs menu: {ex}"),
                     bgcolor=ft.colors.RED
                 )
             )
     
     def _close_editor(self):
-        """Close the integrated editor"""
+        """Close any open docs (editor, admin guide, docs viewer, or menu)"""
         try:
-            # Remove editor from chat list
+            # Remove any docs containers from chat list
             self.chat_list.controls = [control for control in self.chat_list.controls 
-                                      if not hasattr(control, 'editor_container')]
+                                      if not (hasattr(control, 'editor_container') or 
+                                             hasattr(control, 'admin_guide_container') or
+                                             hasattr(control, 'docs_viewer_container') or
+                                             hasattr(control, 'docs_menu_container'))]
             self.editor_open = False
             self.page.update()
-            print("[Chat] Editor closed")
+            print("[Chat] Docs closed")
         except Exception as ex:
-            print(f"[Chat] Error closing editor: {ex}")
+            print(f"[Chat] Error closing docs: {ex}")
     
     def _on_file_picked(self, e: ft.FilePickerResultEvent):
         """Handle file picker result"""
