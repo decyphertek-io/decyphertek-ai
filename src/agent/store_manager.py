@@ -260,12 +260,17 @@ build-backend = "poetry.core.masonry.api"
                 import traceback
                 traceback.print_exc()
 
-            # Mark installed in local cache for chat to detect
-            self._write_agent_cache_entry(agent_id, installed=True)
-
             # Enable by default if requested
-            if info.get("enable_by_default", False):
-                self.set_enabled(agent_id, True)
+            enable_by_default = info.get("enable_by_default", False)
+            
+            # Mark installed in local cache for chat to detect
+            self._write_agent_cache_entry(agent_id, installed=True, enabled=enable_by_default)
+            
+            # Also set enabled state
+            if enable_by_default:
+                self.enabled_state[agent_id] = True
+                self._save_enabled_state()
+                print(f"[StoreManager] ✅ Agent '{agent_id}' enabled by default")
 
             return {"success": True, "message": f"Installed '{agent_id}' to ~/.decyphertek-ai/store/agent/{agent_id}"}
         except Exception as e:
@@ -382,12 +387,17 @@ build-backend = "poetry.core.masonry.api"
                 import traceback
                 traceback.print_exc()
 
-            # Mark installed in local cache
-            self._write_mcp_cache_entry(server_id, installed=True)
-
             # Enable by default if specified
-            if info.get("enable_by_default", False):
-                self.set_mcp_enabled(server_id, True)
+            enable_by_default = info.get("enable_by_default", False)
+            
+            # Mark installed in local cache
+            self._write_mcp_cache_entry(server_id, installed=True, enabled=enable_by_default)
+            
+            # Also set enabled state
+            if enable_by_default:
+                self.mcp_enabled_state[server_id] = True
+                self._save_mcp_enabled_state()
+                print(f"[StoreManager] ✅ MCP server '{server_id}' enabled by default")
 
             return {"success": True, "message": f"Installed MCP server '{server_id}'"}
         except Exception as e:

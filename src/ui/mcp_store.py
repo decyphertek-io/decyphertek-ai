@@ -11,22 +11,22 @@ from pathlib import Path
 class MCPStoreView:
     """Minimal MCP Store tab.
 
-    - Loads instantly from local cache: src/store/mcp/cache.json
-    - Fetches remote skills.json in background and refreshes
-    - Not installed => Download button; Installing => spinner; Installed => Enable/Disable switch
-    - "+" button to set a custom skills.json URL
+    - Uses StoreManager for ALL installation/management logic
+    - Loads instantly from cache
+    - Shows install button or enable/disable toggle
     """
 
-    def __init__(self, page: ft.Page, skills_url: str | None = None):
+    def __init__(self, page: ft.Page, store_manager, skills_url: str | None = None):
         self.page = page
+        self.store_manager = store_manager
         self.skills_url = (
             skills_url
             or "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
         )
-        self.project_root = Path(__file__).resolve().parents[2]
-        self.local_root = self.project_root / "src" / "store" / "mcp"
-        self.cache_path = self.local_root / "cache.json"
-        self.registry_cache_path = self.local_root / "registry.json"
+        self.user_home = Path.home() / ".decyphertek-ai"
+        self.user_store = self.user_home / "store"
+        self.mcp_store_root = self.user_store / "mcp"
+        self.cache_path = self.mcp_store_root / "cache.json"
         self.registry: dict = {}
         self._init_started = False
         self._installing: dict[str, bool] = {}
@@ -169,6 +169,7 @@ class MCPStoreView:
         self.page.update()
 
     def _install_server(self, sid: str):
+        """Install MCP server using StoreManager"""
         if self._installing.get(sid):
             return
         self._installing[sid] = True
@@ -176,29 +177,12 @@ class MCPStoreView:
 
         def _bg_install():
             try:
-                info = self.registry.get("servers", {}).get(sid)
-                if not info:
-                    return
-                repo_url = info.get("repo_url")
-                folder_path = info.get("folder_path")
-                dest = self.local_root / sid
-                self._download_contents_recursive(repo_url, folder_path, dest)
-                # create venv under server folder and install requirements if present
-                venv_dir = dest / ".venv"
-                try:
-                    # create venv
-                    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
-                    vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-                    req = dest / "requirements.txt"
-                    if req.exists():
-                        subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest), capture_output=True, text=True)
-                except Exception as ve:
-                    print(f"[MCPStore] venv/setup error for {sid}: {ve}")
-                # enable_by_default support
-                if info.get("enable_by_default", False):
-                    self._set_enabled(sid, True, write_only=True)
-                # mark installed
-                self._write_cache_entry(sid, installed=True)
+                # Let StoreManager handle EVERYTHING: download, Poetry venv, enable
+                result = self.store_manager.install_mcp_server(sid)
+                if result.get("success"):
+                    print(f"[MCPStore] ✅ {sid} installed successfully")
+                else:
+                    print(f"[MCPStore] ❌ {sid} install failed: {result.get('error')}")
             except Exception as e:
                 print(f"[MCPStore] Install error for {sid}: {e}")
             finally:
@@ -208,7 +192,8 @@ class MCPStoreView:
         threading.Thread(target=_bg_install, daemon=True).start()
 
     def _set_enabled(self, sid: str, value: bool, write_only: bool = False):
-        self._write_cache_entry(sid, enabled=bool(value))
+        """Enable/disable MCP server using StoreManager"""
+        self.store_manager.set_mcp_enabled(sid, bool(value))
         if not write_only:
             self._refresh()
 
@@ -290,25 +275,6 @@ class MCPStoreView:
         folder = folder_path.strip("/")
         return f"https://api.github.com/repos/{owner}/{repo}/contents/{folder}?ref={ref}"
 
-    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        url = self._contents_api_url(repo_url, folder_path, ref)
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            items = json.loads(resp.read().decode("utf-8"))
-        if isinstance(items, dict) and items.get("message"):
-            raise RuntimeError(items.get("message"))
-        for item in items:
-            itype = item.get("type")
-            name = item.get("name")
-            path = item.get("path")
-            download_url = item.get("download_url")
-            if itype == "file" and download_url:
-                target = dest_dir / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with urllib.request.urlopen(download_url, timeout=20) as fsrc, open(target, "wb") as fdst:
-                    fdst.write(fsrc.read())
-            elif itype == "dir":
-                self._download_contents_recursive(repo_url, path, dest_dir / name, ref)
 
     def _name_for(self, sid: str):
         return sid.replace("-", " ").title()

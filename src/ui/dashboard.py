@@ -470,7 +470,7 @@ class DashboardView:
         """Delegate MCP tab to isolated view."""
         if self._mcp_tab_content is not None:
             return self._mcp_tab_content
-        self._mcp_tab_content = MCPStoreView(self.page).build()
+        self._mcp_tab_content = MCPStoreView(self.page, self.store_manager).build()
         return self._mcp_tab_content
     
     def _create_mcp_server_card(self, title: str, description: str, icon, color, server_id: str, connected: bool = False):
