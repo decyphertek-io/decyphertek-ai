@@ -226,7 +226,7 @@ class MCPStoreView:
 
     def _read_registry_cache(self) -> dict:
         try:
-            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.mcp_store_root.mkdir(parents=True, exist_ok=True)
             if self.registry_cache_path.exists():
                 return json.loads(self.registry_cache_path.read_text(encoding="utf-8"))
         except Exception:
@@ -235,14 +235,14 @@ class MCPStoreView:
 
     def _write_registry_cache(self, data: dict) -> None:
         try:
-            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.mcp_store_root.mkdir(parents=True, exist_ok=True)
             self.registry_cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass
 
     def _read_cache(self) -> dict:
         try:
-            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.mcp_store_root.mkdir(parents=True, exist_ok=True)
             if self.cache_path.exists():
                 return json.loads(self.cache_path.read_text(encoding="utf-8"))
         except Exception:
@@ -251,7 +251,7 @@ class MCPStoreView:
 
     def _write_cache(self, data: dict) -> None:
         try:
-            self.local_root.mkdir(parents=True, exist_ok=True)
+            self.mcp_store_root.mkdir(parents=True, exist_ok=True)
             self.cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # DecypherTek AI - Custom Edition
-# Automated setup and launch script
+# Automated setup and launch script with centralized data directory
 
 set -e  # Exit on error
 
@@ -16,6 +16,9 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Centralized data directory
+DATA_DIR="$HOME/.decyphertek-ai"
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   DecypherTek AI - Custom Edition      ║${NC}"
 echo -e "${BLUE}║   Automated Setup & Launch             ║${NC}"
@@ -23,7 +26,7 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # Check Python version
-echo -e "${YELLOW}[1/5] Checking Python version...${NC}"
+echo -e "${YELLOW}[1/6] Checking Python version...${NC}"
 PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
 PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
 PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
@@ -36,70 +39,69 @@ echo -e "${GREEN}✓ Python $PYTHON_VERSION detected${NC}"
 echo ""
 
 # Check if Poetry is installed
-echo -e "${YELLOW}[2/5] Checking for Poetry...${NC}"
+echo -e "${YELLOW}[2/6] Checking for Poetry...${NC}"
 if command -v poetry &> /dev/null; then
     POETRY_VERSION=$(poetry --version 2>&1 | awk '{print $3}')
     echo -e "${GREEN}✓ Poetry $POETRY_VERSION found${NC}"
     USE_POETRY=true
 else
-    echo -e "${YELLOW}⚠ Poetry not found. Will use pip instead.${NC}"
-    echo -e "${BLUE}  Install Poetry for better dependency management:${NC}"
-    echo -e "${BLUE}  curl -sSL https://install.python-poetry.org | python3 -${NC}"
-    USE_POETRY=false
+    echo -e "${RED}✗ Poetry not found${NC}"
+    echo -e "${BLUE}  Install Poetry with: curl -sSL https://install.python-poetry.org | python3 -${NC}"
+    exit 1
 fi
 echo ""
 
-# Setup environment and install dependencies
-if [ "$USE_POETRY" = true ]; then
-    echo -e "${YELLOW}[3/5] Setting up Poetry environment...${NC}"
-    
-    # Ensure keyring is disabled (belt and suspenders approach)
-    export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-    
-    # Check if virtual environment exists
-    if ! poetry env info &> /dev/null; then
-        echo -e "${BLUE}  Creating new Poetry virtual environment...${NC}"
-        poetry env use python3
-    fi
-    
-    echo -e "${YELLOW}[4/5] Installing dependencies with Poetry...${NC}"
-    poetry install --no-root
-    
-    echo -e "${GREEN}✓ Poetry environment ready${NC}"
-    echo ""
-    
-    echo -e "${YELLOW}[5/5] Launching DecypherTek AI...${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    
-    # Launch the app
-    poetry run python src/main.py
-    
+# Create centralized data directory
+echo -e "${YELLOW}[3/6] Setting up data directory...${NC}"
+if [ ! -d "$DATA_DIR" ]; then
+    echo -e "${BLUE}  Creating $DATA_DIR${NC}"
+    mkdir -p "$DATA_DIR"
+    mkdir -p "$DATA_DIR/store/agent"
+    mkdir -p "$DATA_DIR/store/mcp"
+    mkdir -p "$DATA_DIR/store/app"
+    mkdir -p "$DATA_DIR/documents"
+    mkdir -p "$DATA_DIR/notes"
+    echo -e "${GREEN}✓ Data directory created${NC}"
 else
-    echo -e "${YELLOW}[3/5] Checking for virtual environment...${NC}"
-    
-    # Create venv if it doesn't exist
-    if [ ! -d "venv" ]; then
-        echo -e "${BLUE}  Creating virtual environment...${NC}"
-        python3 -m venv venv
-        echo -e "${GREEN}✓ Virtual environment created${NC}"
-    else
-        echo -e "${GREEN}✓ Virtual environment exists${NC}"
-    fi
-    echo ""
-    
-    echo -e "${YELLOW}[4/5] Installing dependencies with pip...${NC}"
-    source venv/bin/activate
-    pip install -q --upgrade pip
-    pip install -q -r requirements.txt
-    echo -e "${GREEN}✓ Dependencies installed${NC}"
-    echo ""
-    
-    echo -e "${YELLOW}[5/5] Launching DecypherTek AI...${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    
-    # Launch the app
-    python src/main.py
+    echo -e "${GREEN}✓ Data directory exists${NC}"
 fi
+echo ""
 
+# Setup Poetry environment in data directory
+echo -e "${YELLOW}[4/6] Setting up Poetry environment...${NC}"
+
+# Configure Poetry to create venv in data directory
+export POETRY_VIRTUALENVS_PATH="$DATA_DIR"
+export POETRY_VIRTUALENVS_IN_PROJECT=false
+export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+
+# Check if virtual environment exists in data directory
+VENV_PATH="$DATA_DIR/.venv"
+if [ ! -d "$VENV_PATH" ]; then
+    echo -e "${BLUE}  Creating new Poetry virtual environment in $DATA_DIR/.venv${NC}"
+    poetry config virtualenvs.path "$DATA_DIR"
+    poetry env use python3
+    echo -e "${GREEN}✓ Virtual environment created${NC}"
+else
+    echo -e "${GREEN}✓ Virtual environment exists${NC}"
+    # Check if dependencies need updating
+    if [ "$1" == "--update" ] || [ "$1" == "-u" ]; then
+        echo -e "${BLUE}  Updating dependencies...${NC}"
+        poetry update
+    fi
+fi
+echo ""
+
+echo -e "${YELLOW}[5/6] Installing dependencies with Poetry...${NC}"
+poetry install --no-root
+echo -e "${GREEN}✓ Poetry environment ready${NC}"
+echo ""
+
+echo -e "${YELLOW}[6/6] Launching DecypherTek AI...${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}Data directory: $DATA_DIR${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Launch the app
+poetry run python src/main.py

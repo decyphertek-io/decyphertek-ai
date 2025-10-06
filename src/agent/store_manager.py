@@ -80,6 +80,10 @@ class StoreManager:
         self.local_store_root.mkdir(parents=True, exist_ok=True)
         self.mcp_store_root.mkdir(parents=True, exist_ok=True)
         self.app_local_root.mkdir(parents=True, exist_ok=True)
+        
+        # Auto-install components with enable_by_default: true
+        self._start_agent_background_sync()
+        self._start_mcp_background_sync()
 
     # -------------------
     # Registry management
@@ -222,23 +226,19 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml")
                 
-                # Configure Poetry to create .venv in project directory
-                print(f"[StoreManager] Configuring Poetry for local .venv...")
-                subprocess.run(
-                    ["poetry", "config", "virtualenvs.in-project", "true"],
-                    cwd=str(dest_dir),
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Run poetry install in the directory
+                # Run poetry install with environment variable to force local .venv
                 print(f"[StoreManager] Running 'poetry install' for agent '{agent_id}'...")
+                env = os.environ.copy()
+                env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
+                env["POETRY_VIRTUALENVS_CREATE"] = "true"
+                
                 result = subprocess.run(
-                    ["poetry", "install"],
+                    ["poetry", "install", "--no-root"],
                     cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    env=env
                 )
                 
                 if result.returncode == 0:
@@ -331,23 +331,19 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml")
                 
-                # Configure Poetry to create .venv in project directory
-                print(f"[StoreManager] Configuring Poetry for local .venv...")
-                subprocess.run(
-                    ["poetry", "config", "virtualenvs.in-project", "true"],
-                    cwd=str(dest_dir),
-                    check=False,
-                    capture_output=True
-                )
-                
-                # Run poetry install in the directory
+                # Run poetry install with environment variable to force local .venv
                 print(f"[StoreManager] Running 'poetry install' for MCP server '{server_id}'...")
+                env = os.environ.copy()
+                env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
+                env["POETRY_VIRTUALENVS_CREATE"] = "true"
+                
                 result = subprocess.run(
-                    ["poetry", "install"],
+                    ["poetry", "install", "--no-root"],
                     cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    env=env
                 )
                 
                 if result.returncode == 0:
@@ -647,26 +643,81 @@ build-backend = "poetry.core.masonry.api"
         self._save_enabled_state_generic(self.mcp_enabled_state_path, self.mcp_enabled_state)
 
 
-    def _start_mcp_background_sync(self) -> None:
-        """Auto-install and enable default MCP servers, then refresh cache for UI."""
+    def _start_agent_background_sync(self) -> None:
+        """Auto-install and enable default agents."""
         def _bg():
             try:
+                print("[StoreManager] Fetching agent registry...")
+                registry = self.fetch_registry()
+                
+                # Save registry locally
+                registry_path = self.local_store_root / "personality.json"
+                registry_path.parent.mkdir(parents=True, exist_ok=True)
+                registry_path.write_text(json.dumps(registry, indent=2))
+                print(f"[StoreManager] Saved personality.json to {registry_path}")
+                
+                agents = (registry.get("agents") or {}) if isinstance(registry, dict) else {}
+                for aid, info in agents.items():
+                    if info.get("enable_by_default", False):
+                        try:
+                            print(f"[StoreManager] Checking agent '{aid}' (enable_by_default: true)")
+                            if not self.is_installed(aid):
+                                print(f"[StoreManager] Installing agent '{aid}'...")
+                                res = self.install_agent(aid)
+                                if not res.get("success"):
+                                    print(f"[StoreManager] Failed to install '{aid}': {res.get('error')}")
+                                    continue
+                                print(f"[StoreManager] ✅ Agent '{aid}' installed and enabled")
+                            else:
+                                print(f"[StoreManager] Agent '{aid}' already installed")
+                                # Ensure it's enabled
+                                if not self.is_enabled(aid):
+                                    self.set_enabled(aid, True)
+                                    print(f"[StoreManager] ✅ Agent '{aid}' enabled")
+                        except Exception as e:
+                            print(f"[StoreManager] Error with agent '{aid}': {e}")
+                            continue
+            except Exception as e:
+                print(f"[StoreManager] Agent sync error: {e}")
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _start_mcp_background_sync(self) -> None:
+        """Auto-install and enable default MCP servers."""
+        def _bg():
+            try:
+                print("[StoreManager] Fetching MCP registry...")
                 registry = self.fetch_mcp_registry()
+                
+                # Save registry locally
+                registry_path = self.mcp_store_root / "skills.json"
+                registry_path.parent.mkdir(parents=True, exist_ok=True)
+                registry_path.write_text(json.dumps(registry, indent=2))
+                print(f"[StoreManager] Saved skills.json to {registry_path}")
+                
                 servers = (registry.get("servers") or {}) if isinstance(registry, dict) else {}
                 for sid, info in servers.items():
                     if info.get("enable_by_default", False):
                         try:
+                            print(f"[StoreManager] Checking MCP server '{sid}' (enable_by_default: true)")
                             if not self.is_mcp_installed(sid):
+                                print(f"[StoreManager] Installing MCP server '{sid}'...")
                                 res = self.install_mcp_server(sid)
                                 if not res.get("success"):
+                                    print(f"[StoreManager] Failed to install '{sid}': {res.get('error')}")
                                     continue
-                            # Ensure enabled and cache reflects state
-                            self.set_mcp_enabled(sid, True)
-                            self._write_mcp_cache_entry(sid, installed=True, enabled=True)
-                        except Exception:
+                                print(f"[StoreManager] ✅ MCP server '{sid}' installed and enabled")
+                            else:
+                                print(f"[StoreManager] MCP server '{sid}' already installed")
+                                # Ensure it's enabled
+                                if not self.is_mcp_enabled(sid):
+                                    self.set_mcp_enabled(sid, True)
+                                    print(f"[StoreManager] ✅ MCP server '{sid}' enabled")
+                        except Exception as e:
+                            print(f"[StoreManager] Error with MCP server '{sid}': {e}")
                             continue
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[StoreManager] MCP sync error: {e}")
 
         threading.Thread(target=_bg, daemon=True).start()
 

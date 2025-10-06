@@ -16,7 +16,7 @@ A modern AI assistant with chat, document management, and app integration capabi
 ```bash
    # Using Poetry (recommended)
    bash -c "$(curl -sSL https://install.python-poetry.org)"
-   poetry install
+poetry install
    ```
 
 2. **Launch the App**
