@@ -796,7 +796,7 @@ class ChatManager:
     
     def _setup_mcp_environment(self, server_id: str) -> bool:
         """Set up the environment for an MCP server - delegates to StoreManager."""
-        # StoreManager handles all installation and setup via store-manager.sh
+        # StoreManager handles all installation and setup via each component's build.sh
         print(f"[ChatManager] MCP server '{server_id}' managed by StoreManager")
         return True
     

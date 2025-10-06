@@ -226,16 +226,20 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml")
                 
-                # Use bash script to set up Poetry environment (same approach as launch.sh)
+                # Use the component's build.sh script (same approach as launch.sh)
                 print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
-                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
+                build_script = dest_dir / "build.sh"
                 
-                result = subprocess.run(
-                    [str(script_path), str(dest_dir)],
-                    check=False,
-                    capture_output=True,
-                    text=True
-                )
+                if build_script.exists():
+                    result = subprocess.run(
+                        ["bash", str(build_script)],
+                        check=False,
+                        capture_output=True,
+                        text=True
+                    )
+                else:
+                    print(f"[StoreManager] Warning: No build.sh found for '{agent_id}'")
+                    result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
                 
                 # Always print output for debugging
                 if result.stdout:
@@ -359,16 +363,20 @@ build-backend = "poetry.core.masonry.api"
                     pyproject.write_text(pyproject_content)
                     print(f"[StoreManager] Created pyproject.toml with dependencies from requirements.txt")
                 
-                # Use bash script to set up Poetry environment (same approach as launch.sh)
+                # Use the component's build.sh script (same approach as launch.sh)
                 print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
-                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
+                build_script = dest_dir / "build.sh"
                 
-                result = subprocess.run(
-                    [str(script_path), str(dest_dir)],
-                    check=False,
-                    capture_output=True,
-                    text=True
-                )
+                if build_script.exists():
+                    result = subprocess.run(
+                        ["bash", str(build_script)],
+                        check=False,
+                        capture_output=True,
+                        text=True
+                    )
+                else:
+                    print(f"[StoreManager] Warning: No build.sh found for '{server_id}'")
+                    result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
                 
                 # Always print output for debugging
                 if result.stdout:
@@ -980,27 +988,30 @@ build-backend = "poetry.core.masonry.api"
             pyproject_file = dest_dir / "pyproject.toml"
             req_file = dest_dir / "requirements.txt"
             
-            # If pyproject.toml exists, use Poetry via bash script
+            # If pyproject.toml exists, use Poetry via component's build.sh
             if pyproject_file.exists():
                 print(f"[StoreManager] Setting up Poetry environment for app '{app_id}'...")
-                script_path = Path(__file__).resolve().parents[2] / "scripts" / "store-manager.sh"
+                build_script = dest_dir / "build.sh"
                 
-                result = subprocess.run(
-                    [str(script_path), str(dest_dir)],
-                    check=False,
-                    capture_output=True,
-                    text=True
-                )
-                
-                # Always print output for debugging
-                if result.stdout:
-                    print(f"[StoreManager] Script output:\n{result.stdout}")
-                if result.stderr:
-                    print(f"[StoreManager] Script errors:\n{result.stderr}")
-                
-                if result.returncode != 0:
-                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
-                    return {"success": False, "error": f"Poetry setup failed: {result.stderr}"}
+                if build_script.exists():
+                    result = subprocess.run(
+                        ["bash", str(build_script)],
+                        check=False,
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    # Always print output for debugging
+                    if result.stdout:
+                        print(f"[StoreManager] Script output:\n{result.stdout}")
+                    if result.stderr:
+                        print(f"[StoreManager] Script errors:\n{result.stderr}")
+                    
+                    if result.returncode != 0:
+                        print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
+                        return {"success": False, "error": f"Poetry setup failed: {result.stderr}"}
+                else:
+                    print(f"[StoreManager] Warning: No build.sh found for app '{app_id}'")
             
             # Fallback to requirements.txt for apps without pyproject.toml
             elif req_file.exists():
