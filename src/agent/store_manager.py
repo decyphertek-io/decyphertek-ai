@@ -228,11 +228,19 @@ class StoreManager:
             # Create local venv and install requirements if present
             venv_dir = dest_dir / ".venv"
             try:
+                print(f"[StoreManager] Creating new .venv for {server_id}")
                 subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                 req = dest_dir / "requirements.txt"
                 if req.exists():
-                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    print(f"[StoreManager] Installing requirements for {server_id} into new .venv")
+                    result = subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    if result.returncode == 0:
+                        print(f"[StoreManager] ✅ Requirements installed successfully for {server_id}")
+                    else:
+                        print(f"[StoreManager] ⚠️ Requirements install warning for {server_id}: {result.stderr}")
+                else:
+                    print(f"[StoreManager] No requirements.txt found for {server_id}")
             except Exception as ve:
                 print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
 
