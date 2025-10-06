@@ -56,8 +56,8 @@ class ChatManager:
         # Ensure enabled state directories exist
         self.agent_enabled_path.parent.mkdir(parents=True, exist_ok=True)
         
-        print(f"[ChatManager] Initialized with base_path: {self.base_path}")
-        print(f"[ChatManager] Store root: {self.store_root}")
+        print(f"[ChatManager] Initialized with store_root: {self.store_root}")
+        print(f"[ChatManager] User home: {self.user_home}")
         
         # Initialize stores in background
         self._initialize_stores_async()
@@ -1837,7 +1837,7 @@ if __name__ == "__main__":
         status = self.get_agent_status()
         debug_lines = [
             "=== ChatManager Debug Info ===",
-            f"Base path: {self.base_path}",
+            f"User home: {self.user_home}",
             f"Store root: {self.store_root}",
             f"Agent cache exists: {(self.store_root / 'agent' / 'cache.json').exists()}",
             f"MCP cache exists: {(self.store_root / 'mcp' / 'cache.json').exists()}",
@@ -1866,7 +1866,7 @@ if __name__ == "__main__":
             # Chat Manager Status
             result_lines.append("### 📋 **Chat Manager Status**")
             result_lines.append("✅ **Chat Manager:** Operational")
-            result_lines.append(f"**Base Path:** {self.base_path}")
+            result_lines.append(f"**User Home:** {self.user_home}")
             result_lines.append(f"**Store Root:** {self.store_root}")
             result_lines.append(f"**AI Client:** {type(self.ai_client).__name__ if self.ai_client else 'None'}")
             result_lines.append(f"**Document Manager:** {type(self.document_manager).__name__ if self.document_manager else 'None'}")
