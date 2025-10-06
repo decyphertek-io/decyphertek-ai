@@ -39,28 +39,47 @@ import sys
 class StoreManager:
     def __init__(self, registry_url: Optional[str] = None) -> None:
         self.project_root = Path(__file__).resolve().parents[2]
-        # Store layout: ./src/store/agent/<personality>
-        self.local_store_root = self.project_root / "src" / "store" / "agent"
-        self.mcp_store_root = self.project_root / "src" / "store" / "mcp"
-        self.enabled_state_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
-        self.mcp_enabled_state_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
+        
+        # NEW ARCHITECTURE: All installed components go to ~/.decyphertek-ai/store/
+        # Bundled templates stay in ./src/store/
+        self.user_home = Path.home() / ".decyphertek-ai"
+        self.user_store_root = self.user_home / "store"
+        
+        # Installed stores (in user home)
+        self.local_store_root = self.user_store_root / "agent"
+        self.mcp_store_root = self.user_store_root / "mcp"
+        self.app_local_root = self.user_store_root / "app"
+        
+        # Bundled stores (in project, read-only templates)
+        self.bundled_agent_root = self.project_root / "src" / "store" / "agent"
+        self.bundled_mcp_root = self.project_root / "src" / "store" / "mcp"
+        self.bundled_app_root = self.project_root / "src" / "store" / "app"
+        
+        # State files
+        self.enabled_state_path = self.user_home / "agent-enabled.json"
+        self.mcp_enabled_state_path = self.user_home / "mcp-enabled.json"
+        self.app_enabled_state_path = self.user_home / "app-enabled.json"
 
+        # Registries
         self.registry_url = (
             registry_url
             or "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/personality.json"
         )
         self.mcp_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
+        
         self.registry: Dict[str, Any] = {}
         self.mcp_registry: Dict[str, Any] = {}
+        self.app_registry: Dict[str, Any] = {}
+        
         self.enabled_state: Dict[str, bool] = self._load_enabled_state()
         self.mcp_enabled_state: Dict[str, bool] = self._load_mcp_enabled_state()
-
-        # App store configuration
-        self.app_local_root = self.project_root / "src" / "store" / "app"
-        self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
-        self.app_registry: Dict[str, Any] = {}
-        self.app_enabled_state_path = Path.home() / ".decyphertek-ai" / "app-enabled.json"
         self.app_enabled_state: Dict[str, bool] = self._load_enabled_state_generic(self.app_enabled_state_path)
+        
+        # Ensure store directories exist
+        self.local_store_root.mkdir(parents=True, exist_ok=True)
+        self.mcp_store_root.mkdir(parents=True, exist_ok=True)
+        self.app_local_root.mkdir(parents=True, exist_ok=True)
 
     # -------------------
     # Registry management
@@ -161,7 +180,8 @@ class StoreManager:
         repo_url = info.get("repo_url", "https://github.com/decyphertek-io/agent-store")
         folder_path = info.get("folder_path", f"{agent_id}/")
         contents_url = self._contents_api_url(repo_url, folder_path)
-        # Install under ./store/agent
+        
+        # Install under ~/.decyphertek-ai/store/agent/
         dest_root = self.local_store_root
         dest_root.mkdir(parents=True, exist_ok=True)
         dest_dir = dest_root / Path(folder_path).name
@@ -175,16 +195,60 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
 
-            # Create local venv and install requirements if present (for Chaquopy-like isolation)
+            # Create local venv using system python3 and install requirements
             venv_dir = dest_dir / ".venv"
             try:
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+                print(f"[StoreManager] Creating .venv for agent '{agent_id}' using system python3...")
+                
+                # Use system python3 directly (not the app's Python)
+                python_cmd = "python3"
+                
+                # Create venv with system python3
+                venv_result = subprocess.run(
+                    [python_cmd, "-m", "venv", str(venv_dir)],
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+                
+                if venv_result.returncode != 0:
+                    print(f"[StoreManager] ❌ Agent venv creation failed: {venv_result.stderr}")
+                    raise RuntimeError(f"venv creation failed: {venv_result.stderr}")
+                
+                print(f"[StoreManager] ✅ Agent venv created successfully")
+                
+                # Get venv Python path
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                
+                if not vpy.exists():
+                    raise RuntimeError(f"venv Python not found at {vpy}")
+                
+                # Install requirements if present
                 req = dest_dir / "requirements.txt"
                 if req.exists():
-                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    print(f"[StoreManager] Installing requirements for agent '{agent_id}'...")
+                    result = subprocess.run(
+                        [str(vpy), "-m", "pip", "install", "-r", str(req)],
+                        check=False,
+                        cwd=str(dest_dir),
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if result.returncode == 0:
+                        print(f"[StoreManager] ✅ Agent requirements installed successfully")
+                    else:
+                        print(f"[StoreManager] ⚠️ Agent requirements install had issues:")
+                        print(f"[StoreManager] STDERR: {result.stderr}")
+                        if result.stdout:
+                            print(f"[StoreManager] STDOUT: {result.stdout}")
+                else:
+                    print(f"[StoreManager] No requirements.txt found for agent '{agent_id}'")
+                    
             except Exception as ve:
-                print(f"[StoreManager] Agent venv/setup error for {agent_id}: {ve}")
+                print(f"[StoreManager] ❌ Agent venv/setup error for {agent_id}: {ve}")
+                import traceback
+                traceback.print_exc()
 
             # Mark installed in local cache for chat to detect
             self._write_agent_cache_entry(agent_id, installed=True)
@@ -193,7 +257,7 @@ class StoreManager:
             if info.get("enable_by_default", False):
                 self.set_enabled(agent_id, True)
 
-            return {"success": True, "message": f"Installed '{agent_id}'"}
+            return {"success": True, "message": f"Installed '{agent_id}' to ~/.decyphertek-ai/store/agent/{agent_id}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -225,42 +289,76 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
 
-            # Create local venv and install requirements if present
+            # Create local venv using system python3 and install requirements
             venv_dir = dest_dir / ".venv"
             try:
-                print(f"[StoreManager] Creating new .venv for {server_id}")
-                venv_result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
-                if venv_result.returncode != 0:
-                    print(f"[StoreManager] ⚠️ venv creation warning: {venv_result.stderr}")
+                print(f"[StoreManager] Creating .venv for {server_id} using system python3...")
                 
+                # Use system python3 directly (not the app's Python)
+                python_cmd = "python3"
+                
+                # Create venv with system python3
+                venv_result = subprocess.run(
+                    [python_cmd, "-m", "venv", str(venv_dir)],
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+                
+                if venv_result.returncode != 0:
+                    print(f"[StoreManager] ❌ venv creation failed: {venv_result.stderr}")
+                    raise RuntimeError(f"venv creation failed: {venv_result.stderr}")
+                
+                print(f"[StoreManager] ✅ venv created successfully")
+                
+                # Get venv Python path
                 vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                 
-                # Ensure pip is up to date
-                print(f"[StoreManager] Upgrading pip in .venv for {server_id}")
-                pip_upgrade = subprocess.run([str(vpy), "-m", "pip", "install", "--upgrade", "pip"], check=False, capture_output=True, text=True)
-                if pip_upgrade.returncode != 0:
-                    print(f"[StoreManager] ⚠️ pip upgrade warning: {pip_upgrade.stderr}")
+                if not vpy.exists():
+                    raise RuntimeError(f"venv Python not found at {vpy}")
                 
+                # Install requirements if present
                 req = dest_dir / "requirements.txt"
                 if req.exists():
-                    print(f"[StoreManager] Installing requirements for {server_id} into new .venv")
-                    result = subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
+                    print(f"[StoreManager] Installing requirements for {server_id}...")
+                    result = subprocess.run(
+                        [str(vpy), "-m", "pip", "install", "-r", str(req)],
+                        check=False,
+                        cwd=str(dest_dir),
+                        capture_output=True,
+                        text=True
+                    )
+                    
                     if result.returncode == 0:
-                        print(f"[StoreManager] ✅ Requirements installed successfully for {server_id}")
-                        # Verify installation
-                        verify = subprocess.run([str(vpy), "-m", "pip", "list"], check=False, capture_output=True, text=True)
-                        if "duckduckgo-search" in verify.stdout:
-                            print(f"[StoreManager] ✅ Verified: duckduckgo-search installed")
-                        if "requests" in verify.stdout:
-                            print(f"[StoreManager] ✅ Verified: requests installed")
+                        print(f"[StoreManager] ✅ Requirements installed successfully")
+                        
+                        # Verify key packages
+                        verify = subprocess.run(
+                            [str(vpy), "-m", "pip", "list"],
+                            check=False,
+                            capture_output=True,
+                            text=True
+                        )
+                        if verify.returncode == 0:
+                            installed = verify.stdout.lower()
+                            if "duckduckgo" in installed:
+                                print(f"[StoreManager] ✅ Verified: duckduckgo-search")
+                            if "requests" in installed:
+                                print(f"[StoreManager] ✅ Verified: requests")
+                            if "mcp" in installed:
+                                print(f"[StoreManager] ✅ Verified: mcp")
                     else:
-                        print(f"[StoreManager] ⚠️ Requirements install warning for {server_id}:")
+                        print(f"[StoreManager] ⚠️ Requirements install had issues:")
                         print(f"[StoreManager] STDERR: {result.stderr}")
-                        print(f"[StoreManager] STDOUT: {result.stdout}")
+                        if result.stdout:
+                            print(f"[StoreManager] STDOUT: {result.stdout}")
                 else:
                     print(f"[StoreManager] No requirements.txt found for {server_id}")
+                    
             except Exception as ve:
-                print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
+                print(f"[StoreManager] ❌ MCP venv/setup error for {server_id}: {ve}")
+                import traceback
+                traceback.print_exc()
 
             # Mark installed in local cache
             self._write_mcp_cache_entry(server_id, installed=True)
@@ -468,10 +566,10 @@ class StoreManager:
     # Agent cache for UI/chat
     # --------------------
     def _write_agent_cache_entry(self, aid: str, installed: bool | None = None, enabled: bool | None = None) -> None:
-        local_root = self.project_root / "src" / "store" / "agent"
-        cache_path = local_root / "cache.json"
+        """Write to ~/.decyphertek-ai/store/agent/cache.json"""
+        cache_path = self.local_store_root / "cache.json"
         try:
-            local_root.mkdir(parents=True, exist_ok=True)
+            self.local_store_root.mkdir(parents=True, exist_ok=True)
             data: Dict[str, Any] = {}
             if cache_path.exists():
                 data = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -482,8 +580,8 @@ class StoreManager:
                 entry["enabled"] = bool(enabled)
             data[aid] = entry
             cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[StoreManager] Agent cache write error: {e}")
 
     # -----------------
     # MCP Store methods
@@ -539,25 +637,6 @@ class StoreManager:
                 pass
 
         threading.Thread(target=_bg, daemon=True).start()
-
-    def _write_mcp_cache_entry(self, sid: str, installed: bool | None = None, enabled: bool | None = None) -> None:
-        """Write to src/store/mcp/cache.json so UI updates show installed/enabled."""
-        local_root = self.project_root / "src" / "store" / "mcp"
-        cache_path = local_root / "cache.json"
-        try:
-            local_root.mkdir(parents=True, exist_ok=True)
-            data: Dict[str, Any] = {}
-            if cache_path.exists():
-                data = json.loads(cache_path.read_text(encoding="utf-8"))
-            entry = data.get(sid, {})
-            if installed is not None:
-                entry["installed"] = bool(installed)
-            if enabled is not None:
-                entry["enabled"] = bool(enabled)
-            data[sid] = entry
-            cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        except Exception:
-            pass
 
     def test_mcp_server(self, server_id: str) -> Dict[str, Any]:
         """Test an MCP server installation status (diagnostic only)."""

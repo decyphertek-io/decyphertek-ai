@@ -28,8 +28,10 @@ class ChatManager:
         self.page = page
         self.ai_client = ai_client
         self.document_manager = document_manager
-        self.base_path = Path(__file__).resolve().parents[1]  # src/agent -> src/
-        self.store_root = self.base_path / "store"
+        
+        # NEW ARCHITECTURE: All installed components in ~/.decyphertek-ai/store/
+        self.user_home = Path.home() / ".decyphertek-ai"
+        self.store_root = self.user_home / "store"
         
         # Ensure store directories exist
         (self.store_root / "agent").mkdir(parents=True, exist_ok=True)
@@ -41,14 +43,14 @@ class ChatManager:
         self.mcp_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
         self.app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
         
-        # Cache files
+        # Cache files (in ~/.decyphertek-ai/store/)
         self.agent_cache_path = self.store_root / "agent" / "cache.json"
         self.mcp_cache_path = self.store_root / "mcp" / "cache.json"
         self.app_cache_path = self.store_root / "app" / "cache.json"
         
-        # Enabled state files
-        self.agent_enabled_path = Path.home() / ".decyphertek-ai" / "agent-enabled.json"
-        self.mcp_enabled_path = Path.home() / ".decyphertek-ai" / "mcp-enabled.json"
+        # Enabled state files (in ~/.decyphertek-ai/)
+        self.agent_enabled_path = self.user_home / "agent-enabled.json"
+        self.mcp_enabled_path = self.user_home / "mcp-enabled.json"
         self.app_enabled_path = Path.home() / ".decyphertek-ai" / "app-enabled.json"
         
         # Ensure enabled state directories exist
