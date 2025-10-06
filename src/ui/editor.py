@@ -203,18 +203,24 @@ def launch_editor(chat_view):
         
         folder_input = ft.TextField(
             hint_text="Enter folder name",
-            border_color=ft.colors.BLUE_300
+            border_color=ft.colors.CYAN_400,
+            bgcolor=ft.colors.GREY_800,
+            color=ft.colors.WHITE,
+            text_style=ft.TextStyle(color=ft.colors.WHITE)
         )
         
         folder_dialog = ft.AlertDialog(
-            title=ft.Text("📁 Create New Folder"),
+            title=ft.Text("📁 Create New Folder", color=ft.colors.WHITE),
+            bgcolor=ft.colors.GREY_900,
             content=ft.Container(
                 content=folder_input,
                 padding=10
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: chat_view.page.close(folder_dialog)),
-                ft.TextButton("Create", on_click=create_folder_dialog),
+                ft.TextButton("Cancel", on_click=lambda e: chat_view.page.close(folder_dialog), 
+                             style=ft.ButtonStyle(color=ft.colors.WHITE)),
+                ft.TextButton("Create", on_click=create_folder_dialog,
+                             style=ft.ButtonStyle(color=ft.colors.CYAN_300)),
             ]
         )
         
@@ -242,18 +248,18 @@ def launch_editor(chat_view):
                     content=ft.Row(
                         controls=[
                             ft.Text("📝 Integrated Text Editor", 
-                                   size=16, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE),
+                                   size=16, weight=ft.FontWeight.BOLD, color=ft.colors.CYAN_300),
                             ft.Container(expand=True),  # Spacer
                             ft.IconButton(
                                 icon=ft.icons.CLOSE,
-                                icon_color=ft.colors.RED,
+                                icon_color=ft.colors.RED_400,
                                 tooltip="Close Editor",
                                 on_click=close_editor
                             )
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN
                     ),
-                    bgcolor=ft.colors.BLUE_50,
+                    bgcolor=ft.colors.GREY_800,
                     padding=10,
                     border_radius=ft.border_radius.only(
                         top_left=10, top_right=10
@@ -265,30 +271,30 @@ def launch_editor(chat_view):
                     content=ft.Column(
                         controls=[
                             ft.Text("📄 admin.txt (Read-Only Reference)", 
-                                   weight=ft.FontWeight.BOLD, size=12),
+                                   weight=ft.FontWeight.BOLD, size=12, color=ft.colors.WHITE),
                             admin_field,
                         ],
                         spacing=5
                     ),
                     padding=10,
-                    bgcolor=ft.colors.GREY_100
+                    bgcolor=ft.colors.GREY_700
                 ),
                 
                 # Divider
-                ft.Divider(height=2, color=ft.colors.BLUE_200),
+                ft.Divider(height=2, color=ft.colors.CYAN_400),
                 
                 # Text editor section
                 ft.Container(
                     content=ft.Column(
                         controls=[
                             ft.Text("✏️ Text Editor (Editable)", 
-                                   weight=ft.FontWeight.BOLD, size=12),
+                                   weight=ft.FontWeight.BOLD, size=12, color=ft.colors.WHITE),
                             quicknotes_field,
                         ],
                         spacing=5
                     ),
                     padding=10,
-                    bgcolor=ft.colors.WHITE
+                    bgcolor=ft.colors.GREY_600
                 ),
                 
                 # Editor toolbar
@@ -300,8 +306,8 @@ def launch_editor(chat_view):
                                 icon=ft.icons.FOLDER_OPEN,
                                 on_click=open_file,
                                 style=ft.ButtonStyle(
-                                    bgcolor=ft.colors.BLUE_100,
-                                    color=ft.colors.BLUE_800
+                                    bgcolor=ft.colors.BLUE_700,
+                                    color=ft.colors.WHITE
                                 )
                             ),
                             ft.ElevatedButton(
@@ -309,8 +315,8 @@ def launch_editor(chat_view):
                                 icon=ft.icons.SAVE,
                                 on_click=save_quicknotes,
                                 style=ft.ButtonStyle(
-                                    bgcolor=ft.colors.GREEN_100,
-                                    color=ft.colors.GREEN_800
+                                    bgcolor=ft.colors.GREEN_700,
+                                    color=ft.colors.WHITE
                                 )
                             ),
                             ft.ElevatedButton(
@@ -318,8 +324,8 @@ def launch_editor(chat_view):
                                 icon=ft.icons.SAVE_AS,
                                 on_click=save_as_file,
                                 style=ft.ButtonStyle(
-                                    bgcolor=ft.colors.ORANGE_100,
-                                    color=ft.colors.ORANGE_800
+                                    bgcolor=ft.colors.ORANGE_700,
+                                    color=ft.colors.WHITE
                                 )
                             ),
                             ft.ElevatedButton(
@@ -327,15 +333,15 @@ def launch_editor(chat_view):
                                 icon=ft.icons.CREATE_NEW_FOLDER,
                                 on_click=create_folder,
                                 style=ft.ButtonStyle(
-                                    bgcolor=ft.colors.PURPLE_100,
-                                    color=ft.colors.PURPLE_800
+                                    bgcolor=ft.colors.PURPLE_700,
+                                    color=ft.colors.WHITE
                                 )
                             ),
                         ],
                         spacing=10
                     ),
                     padding=10,
-                    bgcolor=ft.colors.GREY_50,
+                    bgcolor=ft.colors.GREY_800,
                     border_radius=ft.border_radius.only(
                         bottom_left=10, bottom_right=10
                     )
@@ -347,8 +353,8 @@ def launch_editor(chat_view):
         # Static framing within chat window - no margins, full width
         width=chat_view.chat_list.width if hasattr(chat_view.chat_list, 'width') else None,
         height=600,  # Fixed height to fit within chat window
-        bgcolor=ft.colors.WHITE,
-        border=ft.border.all(2, ft.colors.BLUE_200),
+        bgcolor=ft.colors.GREY_900,
+        border=ft.border.all(2, ft.colors.CYAN_400),
         border_radius=10,
         # Remove margins and shadows for static framing
         margin=ft.margin.all(5),  # Minimal margin
