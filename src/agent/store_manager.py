@@ -81,24 +81,9 @@ class StoreManager:
         self.mcp_store_root.mkdir(parents=True, exist_ok=True)
         self.app_local_root.mkdir(parents=True, exist_ok=True)
         
-        # Configure Poetry globally to use in-project venvs
-        self._configure_poetry()
-        
         # Auto-install components with enable_by_default: true
         self._start_agent_background_sync()
         self._start_mcp_background_sync()
-    
-    def _configure_poetry(self) -> None:
-        """Configure Poetry to create .venv in project directories."""
-        try:
-            subprocess.run(
-                ["poetry", "config", "virtualenvs.in-project", "true"],
-                check=False,
-                capture_output=True
-            )
-            print("[StoreManager] Poetry configured to use in-project virtualenvs")
-        except Exception as e:
-            print(f"[StoreManager] Poetry config warning: {e}")
 
     # -------------------
     # Registry management
@@ -243,34 +228,37 @@ build-backend = "poetry.core.masonry.api"
                 
                 # Set up Poetry environment with local .venv
                 print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
+                
+                # Use same environment variables as main project
                 env = os.environ.copy()
                 env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
                 env["POETRY_VIRTUALENVS_CREATE"] = "true"
+                env["POETRY_VIRTUALENVS_PATH"] = str(dest_dir)
                 
                 # First, generate poetry.lock if it doesn't exist
                 lock_file = dest_dir / "poetry.lock"
                 if not lock_file.exists():
                     print(f"[StoreManager] Generating poetry.lock...")
                     lock_result = subprocess.run(
-                        ["poetry", "lock", "--no-update"],
+                        ["poetry", "lock"],
                         cwd=str(dest_dir),
+                        env=env,
                         check=False,
                         capture_output=True,
-                        text=True,
-                        env=env
+                        text=True
                     )
                     if lock_result.returncode != 0:
                         print(f"[StoreManager] Lock generation output: {lock_result.stderr}")
                 
-                # Now install with local venv
+                # Now install dependencies - Poetry will auto-create .venv
                 print(f"[StoreManager] Running 'poetry install' for agent '{agent_id}'...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root", "-vv"],
+                    ["poetry", "install", "--no-root"],
                     cwd=str(dest_dir),
+                    env=env,
                     check=False,
                     capture_output=True,
-                    text=True,
-                    env=env
+                    text=True
                 )
                 
                 if result.returncode != 0:
@@ -393,34 +381,37 @@ build-backend = "poetry.core.masonry.api"
                 
                 # Set up Poetry environment with local .venv
                 print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
+                
+                # Use same environment variables as main project
                 env = os.environ.copy()
                 env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
                 env["POETRY_VIRTUALENVS_CREATE"] = "true"
+                env["POETRY_VIRTUALENVS_PATH"] = str(dest_dir)
                 
                 # First, generate poetry.lock if it doesn't exist
                 lock_file = dest_dir / "poetry.lock"
                 if not lock_file.exists():
                     print(f"[StoreManager] Generating poetry.lock...")
                     lock_result = subprocess.run(
-                        ["poetry", "lock", "--no-update"],
+                        ["poetry", "lock"],
                         cwd=str(dest_dir),
+                        env=env,
                         check=False,
                         capture_output=True,
-                        text=True,
-                        env=env
+                        text=True
                     )
                     if lock_result.returncode != 0:
                         print(f"[StoreManager] Lock generation output: {lock_result.stderr}")
                 
-                # Now install with local venv
+                # Now install dependencies - Poetry will auto-create .venv
                 print(f"[StoreManager] Running 'poetry install' for MCP server '{server_id}'...")
                 result = subprocess.run(
-                    ["poetry", "install", "--no-root", "-vv"],
+                    ["poetry", "install", "--no-root"],
                     cwd=str(dest_dir),
+                    env=env,
                     check=False,
                     capture_output=True,
-                    text=True,
-                    env=env
+                    text=True
                 )
                 
                 if result.returncode != 0:
