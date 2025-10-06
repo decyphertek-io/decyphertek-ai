@@ -846,6 +846,66 @@ class ChatManager:
         except Exception as e:
             print(f"[ChatManager] Error setting up MCP environments: {e}")
     
+    def upload_document(self, filename: str, content: str) -> Dict[str, Any]:
+        """Upload document to simple storage - no API keys needed"""
+        try:
+            print(f"[ChatManager] Uploading {filename} ({len(content)} chars) to storage")
+            
+            # Simple storage - just save the file
+            storage_dir = Path.home() / ".decyphertek-ai" / "documents"
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate unique filename with timestamp
+            import time
+            timestamp = int(time.time() * 1000)
+            safe_filename = filename.replace(" ", "_").replace("/", "_")
+            stored_filename = f"{timestamp}_{safe_filename}"
+            file_path = storage_dir / stored_filename
+            
+            # Save the file
+            file_path.write_text(content, encoding="utf-8")
+            
+            # Update documents metadata
+            docs_metadata_file = Path.home() / ".decyphertek-ai" / "documents.json"
+            documents = {}
+            if docs_metadata_file.exists():
+                try:
+                    documents = json.loads(docs_metadata_file.read_text(encoding="utf-8"))
+                except:
+                    documents = {}
+            
+            # Add document metadata
+            documents[stored_filename] = {
+                "original_filename": filename,
+                "stored_filename": stored_filename,
+                "file_path": str(file_path),
+                "size": len(content),
+                "uploaded_at": timestamp,
+                "source": "chat_upload"
+            }
+            
+            # Save metadata
+            docs_metadata_file.write_text(json.dumps(documents, indent=2), encoding="utf-8")
+            
+            print(f"[ChatManager] Document {filename} stored at {file_path}")
+            
+            return {
+                "success": True,
+                "filename": filename,
+                "stored_filename": stored_filename,
+                "file_path": str(file_path),
+                "size": len(content),
+                "message": f"Document '{filename}' uploaded to storage successfully"
+            }
+            
+        except Exception as e:
+            print(f"[ChatManager] Upload error: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Upload failed: {str(e)}"
+            }
+    
     def _test_mcp_server(self, server_id: str) -> str:
         """Test a specific MCP server to see if it's working."""
         try:

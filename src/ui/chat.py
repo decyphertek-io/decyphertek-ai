@@ -17,7 +17,7 @@ from chat.chat_sessions import ChatSessionManager
 class ChatView:
     """Clean, professional chat interface"""
     
-    def __init__(self, page: ft.Page, openrouter_client, document_manager, on_settings_click, api_key_manager=None, agent=None, storage_dir=None, on_document_uploaded=None):
+    def __init__(self, page: ft.Page, openrouter_client, document_manager, on_settings_click, api_key_manager=None, agent=None, storage_dir=None, on_document_uploaded=None, chat_manager=None):
         """
         Initialize chat view
         
@@ -38,6 +38,7 @@ class ChatView:
         self.api_key_manager = api_key_manager
         self.agent = agent
         self.on_document_uploaded = on_document_uploaded
+        self.chat_manager = chat_manager
         
         # Initialize session manager
         self.session_manager = ChatSessionManager(storage_dir or "/tmp")
@@ -374,41 +375,32 @@ class ChatView:
             self._add_message("system", f"❌ Upload failed: {str(e)}")
     
     async def _upload_document_async(self, file):
-        """Async document upload using RAG MCP server"""
+        """Upload document using chat_manager.py"""
         try:
             # Read file content
             with open(file.path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
             
-            print(f"[Chat] Uploading {file.name} ({len(content)} chars) to RAG")
+            print(f"[Chat] Uploading {file.name} ({len(content)} chars) via chat_manager")
             
-            # Use RAG MCP server to upload document
-            if self.agent and hasattr(self.agent, 'doc_manager') and self.agent.doc_manager:
-                # Use built-in document manager
-                success = await self.agent.doc_manager.add_document(
-                    content=content,
-                    filename=file.name,
-                    source="chat_upload"
-                )
+            # Use chat_manager to handle the upload
+            if hasattr(self, 'chat_manager') and self.chat_manager:
+                result = self.chat_manager.upload_document(file.name, content)
                 
-                if success:
-                    self._add_message("system", f"✅ Document '{file.name}' uploaded to RAG successfully!")
+                if result.get("success"):
+                    self._add_message("system", f"✅ Document '{file.name}' uploaded to storage successfully!")
                     print(f"[Chat] Document {file.name} uploaded successfully")
                     
                     # Notify RAG view to refresh
                     if self.on_document_uploaded:
                         self.on_document_uploaded()
                 else:
-                    self._add_message("system", f"⚠️ Document '{file.name}' already exists in RAG database")
-                    print(f"[Chat] Document {file.name} already exists")
-                    
-                    # Even if document already exists, refresh RAG view to show it
-                    if self.on_document_uploaded:
-                        self.on_document_uploaded()
+                    error_msg = result.get("error", "Unknown error")
+                    self._add_message("system", f"❌ Upload failed: {error_msg}")
+                    print(f"[Chat] Upload failed: {error_msg}")
             else:
-                # Fallback: try to use RAG MCP server directly
-                self._add_message("system", f"⚠️ RAG system not available - cannot upload document")
-                print("[Chat] RAG system not available")
+                self._add_message("system", f"⚠️ Chat manager not available - cannot upload document")
+                print("[Chat] Chat manager not available")
                 
         except Exception as e:
             print(f"[Chat] Upload error: {e}")

@@ -135,6 +135,30 @@ class DocumentManager:
             chunks = self._chunk_text(content)
             print(f"[DocumentManager] Split {filename} into {len(chunks)} chunks")
             
+            # Check if we have API key for embeddings
+            if not self.api_key:
+                print(f"[DocumentManager] No OpenRouter API key available - cannot generate embeddings")
+                print(f"[DocumentManager] Document {filename} will be stored but not indexed for search")
+                # Store document without embeddings
+                doc_file_path = self.docs_storage_dir / f"{doc_id}.txt"
+                doc_file_path.write_text(content, encoding="utf-8")
+                
+                # Store document metadata
+                self.documents[doc_id] = {
+                    "filename": filename,
+                    "source": source,
+                    "chunks": len(chunks),
+                    "size": len(content),
+                    "file_path": str(doc_file_path),
+                    "created_at": timestamp,
+                    "indexed": False,
+                    "reason": "No API key for embeddings"
+                }
+                self._save_documents()
+                
+                print(f"[DocumentManager] Added {filename} without embeddings (ID: {doc_id})")
+                return True
+            
             # Generate embeddings for all chunks
             points = []
             for i, chunk in enumerate(chunks):

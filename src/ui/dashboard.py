@@ -67,6 +67,7 @@ class DashboardView:
         # Initialize AI client/agent lazily (after UI renders)
         self.ai_client = None
         self.agent = None
+        self.adminotaur_agent = None  # Adminotaur agent for RAG integration
         self._ai_init_started = False
         
         # UI state
@@ -83,8 +84,41 @@ class DashboardView:
         self._mcp_tab_content = None
         self._apps_tab_content = None
         
+        # Chat manager for MCP server integration
+        self.chat_manager = None
+        
         # View mode
         self.showing_api_settings = False
+    
+    def _init_chat_manager(self):
+        """Initialize chat manager for MCP server integration"""
+        try:
+            if not self.chat_manager:
+                from agent.chat_manager import ChatManager
+                self.chat_manager = ChatManager(
+                    page=self.page,
+                    ai_client=self.ai_client,
+                    document_manager=self.document_manager
+                )
+                print("[Dashboard] Chat manager initialized for MCP integration")
+        except Exception as e:
+            print(f"[Dashboard] Warning: Could not initialize chat manager: {e}")
+            self.chat_manager = None
+    
+    def _init_adminotaur_agent(self):
+        """Initialize Adminotaur agent for RAG integration"""
+        try:
+            if not self.adminotaur_agent:
+                # Initialize chat manager first
+                self._init_chat_manager()
+                
+                # Import AdminotaurAgent from the store
+                from store.agent.adminotaur.adminotaur import AdminotaurAgent
+                self.adminotaur_agent = AdminotaurAgent(self)
+                print("[Dashboard] Adminotaur agent initialized for RAG integration")
+        except Exception as e:
+            print(f"[Dashboard] Warning: Could not initialize Adminotaur agent: {e}")
+            self.adminotaur_agent = None
     
     def _init_ai_client(self):
         """Initialize AI client and agent based on selected provider"""
@@ -271,15 +305,19 @@ class DashboardView:
         
         # Build chat view
         if not self.chat_view:
+            # Initialize Adminotaur agent for RAG integration
+            self._init_adminotaur_agent()
+            
             self.chat_view = ChatView(
                 self.page,
                 self.ai_client,
                 self.document_manager,
                 on_settings_click=lambda e, open_ollama=False: self._show_api_settings(open_ollama=open_ollama),
                 api_key_manager=self.api_key_manager,
-                agent=self.agent,  # Pass the agent for tool use
+                agent=self.adminotaur_agent,  # Pass Adminotaur agent for RAG integration
                 on_document_uploaded=self._refresh_rag_view,  # Callback to refresh RAG view
-                storage_dir=str(self.credential_manager.storage_dir)  # Pass storage directory for sessions
+                storage_dir=str(self.credential_manager.storage_dir),  # Pass storage directory for sessions
+                chat_manager=self.chat_manager  # Pass chat manager for document uploads
             )
         
         return self.chat_view.build()
