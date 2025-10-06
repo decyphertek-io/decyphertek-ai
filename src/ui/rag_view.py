@@ -480,6 +480,12 @@ class RAGView:
                                 ),
                             ], spacing=2, expand=True),
                             ft.IconButton(
+                                icon=ft.icons.VISIBILITY,
+                                icon_color=ft.colors.BLUE,
+                                tooltip="View Document",
+                                on_click=lambda e, d=doc_id: self._view_document(d)
+                            ),
+                            ft.IconButton(
                                 icon=ft.icons.DELETE_OUTLINE,
                                 icon_color=ft.colors.RED,
                                 tooltip="Delete",
@@ -497,6 +503,64 @@ class RAGView:
         self.stats_text.value = f"{stats['documents']} documents • {stats['chunks']} chunks • {stats['size_mb']} MB"
         
         self.page.update()
+    
+    def _view_document(self, doc_id: str):
+        """View document content"""
+        try:
+            # Get document content from storage
+            content = self.doc_manager.get_document_content(doc_id)
+            if not content:
+                self._show_snackbar("Document content not found", ft.colors.RED)
+                return
+            
+            # Get document metadata
+            documents = self.doc_manager.get_documents()
+            doc_info = documents.get(doc_id, {})
+            filename = doc_info.get('filename', 'Unknown')
+            
+            # Create dialog to show document content
+            def close_dialog(e):
+                dialog.open = False
+                self.page.update()
+            
+            # Create scrollable content
+            content_text = ft.Text(
+                content,
+                size=12,
+                selectable=True,
+                font_family="monospace"
+            )
+            
+            dialog = ft.AlertDialog(
+                title=ft.Text(f"Document: {filename}"),
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Text(f"Size: {len(content)} characters", size=10, color=ft.colors.GREY_600),
+                        ft.Divider(),
+                        ft.Container(
+                            content=content_text,
+                            height=400,
+                            width=600,
+                            border=ft.border.all(1, ft.colors.GREY_300),
+                            border_radius=8,
+                            padding=10,
+                            bgcolor=ft.colors.GREY_50
+                        )
+                    ], spacing=10),
+                    width=650,
+                    height=500
+                ),
+                actions=[
+                    ft.TextButton("Close", on_click=close_dialog)
+                ]
+            )
+            
+            self.page.dialog = dialog
+            dialog.open = True
+            self.page.update()
+            
+        except Exception as e:
+            self._show_snackbar(f"Error viewing document: {e}", ft.colors.RED)
     
     def _delete_document(self, doc_id: str):
         """Delete a document"""

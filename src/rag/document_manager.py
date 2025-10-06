@@ -39,6 +39,10 @@ class DocumentManager:
         # Document metadata storage
         self.docs_file = self.storage_dir / "documents.json"
         self.documents = self._load_documents()
+        
+        # Document content storage directory
+        self.docs_storage_dir = self.storage_dir / "documents"
+        self.docs_storage_dir.mkdir(exist_ok=True)
     
     def _init_collection(self):
         """Initialize Qdrant collection"""
@@ -159,12 +163,18 @@ class DocumentManager:
                     points=points
                 )
                 
+                # Store document content to file
+                doc_file_path = self.docs_storage_dir / f"{doc_id}.txt"
+                doc_file_path.write_text(content, encoding="utf-8")
+                
                 # Store document metadata
                 self.documents[doc_id] = {
                     "filename": filename,
                     "source": source,
                     "chunks": len(chunks),
-                    "size": len(content)
+                    "size": len(content),
+                    "file_path": str(doc_file_path),
+                    "created_at": timestamp
                 }
                 self._save_documents()
                 
@@ -226,6 +236,29 @@ class DocumentManager:
         print(f"[DocumentManager] Document IDs: {list(self.documents.keys())}")
         return self.documents
     
+    def get_document_content(self, doc_id: str) -> Optional[str]:
+        """Get document content from storage"""
+        try:
+            if doc_id not in self.documents:
+                return None
+            
+            doc_info = self.documents[doc_id]
+            file_path = doc_info.get("file_path")
+            
+            if file_path and Path(file_path).exists():
+                return Path(file_path).read_text(encoding="utf-8")
+            else:
+                # Fallback: try to read from docs storage directory
+                doc_file_path = self.docs_storage_dir / f"{doc_id}.txt"
+                if doc_file_path.exists():
+                    return doc_file_path.read_text(encoding="utf-8")
+                else:
+                    return None
+                    
+        except Exception as e:
+            print(f"[DocumentManager] Error reading document {doc_id}: {e}")
+            return None
+    
     def delete_document(self, doc_id: str) -> bool:
         """
         Delete document from RAG store
@@ -251,6 +284,12 @@ class DocumentManager:
                     }
                 }
             )
+            
+            # Remove stored document file
+            doc_info = self.documents[doc_id]
+            file_path = doc_info.get("file_path")
+            if file_path and Path(file_path).exists():
+                Path(file_path).unlink()
             
             # Remove from metadata
             del self.documents[doc_id]
