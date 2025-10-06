@@ -195,58 +195,68 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
 
-            # Create local venv using system python3 and install requirements
-            venv_dir = dest_dir / ".venv"
+            # Use Poetry to manage dependencies
             try:
-                print(f"[StoreManager] Creating .venv for agent '{agent_id}' using system python3...")
+                print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
                 
-                # Use system python3 directly (not the app's Python)
-                python_cmd = "python3"
+                # Check if requirements.txt exists (convert to Poetry if needed)
+                req = dest_dir / "requirements.txt"
+                pyproject = dest_dir / "pyproject.toml"
                 
-                # Create venv with system python3
-                venv_result = subprocess.run(
-                    [python_cmd, "-m", "venv", str(venv_dir)],
+                if req.exists() and not pyproject.exists():
+                    print(f"[StoreManager] Converting requirements.txt to Poetry format...")
+                    # Create basic pyproject.toml
+                    pyproject_content = f"""[tool.poetry]
+name = "{agent_id}"
+version = "1.0.0"
+description = "Agent: {agent_id}"
+authors = ["DecypherTek <decyphertek@proton.me>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+"""
+                    pyproject.write_text(pyproject_content)
+                    print(f"[StoreManager] Created pyproject.toml")
+                
+                # Configure Poetry to create .venv in project directory
+                print(f"[StoreManager] Configuring Poetry for local .venv...")
+                subprocess.run(
+                    ["poetry", "config", "virtualenvs.in-project", "true"],
+                    cwd=str(dest_dir),
+                    check=False,
+                    capture_output=True
+                )
+                
+                # Run poetry install in the directory
+                print(f"[StoreManager] Running 'poetry install' for agent '{agent_id}'...")
+                result = subprocess.run(
+                    ["poetry", "install"],
+                    cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
                     text=True
                 )
                 
-                if venv_result.returncode != 0:
-                    print(f"[StoreManager] ❌ Agent venv creation failed: {venv_result.stderr}")
-                    raise RuntimeError(f"venv creation failed: {venv_result.stderr}")
-                
-                print(f"[StoreManager] ✅ Agent venv created successfully")
-                
-                # Get venv Python path
-                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-                
-                if not vpy.exists():
-                    raise RuntimeError(f"venv Python not found at {vpy}")
-                
-                # Install requirements if present
-                req = dest_dir / "requirements.txt"
-                if req.exists():
-                    print(f"[StoreManager] Installing requirements for agent '{agent_id}'...")
-                    result = subprocess.run(
-                        [str(vpy), "-m", "pip", "install", "-r", str(req)],
-                        check=False,
-                        cwd=str(dest_dir),
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if result.returncode == 0:
-                        print(f"[StoreManager] ✅ Agent requirements installed successfully")
+                if result.returncode == 0:
+                    print(f"[StoreManager] ✅ Poetry environment set up successfully for agent '{agent_id}'")
+                    # Verify .venv exists
+                    venv_dir = dest_dir / ".venv"
+                    if venv_dir.exists():
+                        print(f"[StoreManager] ✅ .venv directory created at {venv_dir}")
                     else:
-                        print(f"[StoreManager] ⚠️ Agent requirements install had issues:")
-                        print(f"[StoreManager] STDERR: {result.stderr}")
-                        if result.stdout:
-                            print(f"[StoreManager] STDOUT: {result.stdout}")
+                        print(f"[StoreManager] ⚠️ .venv not found, Poetry may be using global cache")
                 else:
-                    print(f"[StoreManager] No requirements.txt found for agent '{agent_id}'")
+                    print(f"[StoreManager] ⚠️ Poetry install had issues:")
+                    print(f"[StoreManager] STDERR: {result.stderr}")
+                    if result.stdout:
+                        print(f"[StoreManager] STDOUT: {result.stdout}")
                     
             except Exception as ve:
-                print(f"[StoreManager] ❌ Agent venv/setup error for {agent_id}: {ve}")
+                print(f"[StoreManager] ❌ Poetry setup error for agent '{agent_id}': {ve}")
                 import traceback
                 traceback.print_exc()
 
@@ -289,74 +299,86 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
 
-            # Create local venv using system python3 and install requirements
-            venv_dir = dest_dir / ".venv"
+            # Use Poetry to manage dependencies
             try:
-                print(f"[StoreManager] Creating .venv for {server_id} using system python3...")
+                print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
                 
-                # Use system python3 directly (not the app's Python)
-                python_cmd = "python3"
+                # Check if requirements.txt exists (convert to Poetry if needed)
+                req = dest_dir / "requirements.txt"
+                pyproject = dest_dir / "pyproject.toml"
                 
-                # Create venv with system python3
-                venv_result = subprocess.run(
-                    [python_cmd, "-m", "venv", str(venv_dir)],
+                if req.exists() and not pyproject.exists():
+                    print(f"[StoreManager] Converting requirements.txt to Poetry format...")
+                    # Create basic pyproject.toml
+                    pyproject_content = f"""[tool.poetry]
+name = "mcp-{server_id}"
+version = "1.0.0"
+description = "MCP Server: {server_id}"
+authors = ["DecypherTek <decyphertek@proton.me>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+"""
+                    pyproject.write_text(pyproject_content)
+                    print(f"[StoreManager] Created pyproject.toml")
+                
+                # Configure Poetry to create .venv in project directory
+                print(f"[StoreManager] Configuring Poetry for local .venv...")
+                subprocess.run(
+                    ["poetry", "config", "virtualenvs.in-project", "true"],
+                    cwd=str(dest_dir),
+                    check=False,
+                    capture_output=True
+                )
+                
+                # Run poetry install in the directory
+                print(f"[StoreManager] Running 'poetry install' for MCP server '{server_id}'...")
+                result = subprocess.run(
+                    ["poetry", "install"],
+                    cwd=str(dest_dir),
                     check=False,
                     capture_output=True,
                     text=True
                 )
                 
-                if venv_result.returncode != 0:
-                    print(f"[StoreManager] ❌ venv creation failed: {venv_result.stderr}")
-                    raise RuntimeError(f"venv creation failed: {venv_result.stderr}")
-                
-                print(f"[StoreManager] ✅ venv created successfully")
-                
-                # Get venv Python path
-                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-                
-                if not vpy.exists():
-                    raise RuntimeError(f"venv Python not found at {vpy}")
-                
-                # Install requirements if present
-                req = dest_dir / "requirements.txt"
-                if req.exists():
-                    print(f"[StoreManager] Installing requirements for {server_id}...")
-                    result = subprocess.run(
-                        [str(vpy), "-m", "pip", "install", "-r", str(req)],
-                        check=False,
-                        cwd=str(dest_dir),
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if result.returncode == 0:
-                        print(f"[StoreManager] ✅ Requirements installed successfully")
+                if result.returncode == 0:
+                    print(f"[StoreManager] ✅ Poetry environment set up successfully for MCP '{server_id}'")
+                    # Verify .venv exists
+                    venv_dir = dest_dir / ".venv"
+                    if venv_dir.exists():
+                        print(f"[StoreManager] ✅ .venv directory created at {venv_dir}")
                         
-                        # Verify key packages
-                        verify = subprocess.run(
-                            [str(vpy), "-m", "pip", "list"],
-                            check=False,
-                            capture_output=True,
-                            text=True
-                        )
-                        if verify.returncode == 0:
-                            installed = verify.stdout.lower()
-                            if "duckduckgo" in installed:
-                                print(f"[StoreManager] ✅ Verified: duckduckgo-search")
-                            if "requests" in installed:
-                                print(f"[StoreManager] ✅ Verified: requests")
-                            if "mcp" in installed:
-                                print(f"[StoreManager] ✅ Verified: mcp")
+                        # Verify key packages if this is web-search
+                        if server_id == "web-search":
+                            poetry_show = subprocess.run(
+                                ["poetry", "show"],
+                                cwd=str(dest_dir),
+                                check=False,
+                                capture_output=True,
+                                text=True
+                            )
+                            if poetry_show.returncode == 0:
+                                installed = poetry_show.stdout.lower()
+                                if "duckduckgo" in installed:
+                                    print(f"[StoreManager] ✅ Verified: duckduckgo-search")
+                                if "requests" in installed:
+                                    print(f"[StoreManager] ✅ Verified: requests")
+                                if "mcp" in installed:
+                                    print(f"[StoreManager] ✅ Verified: mcp")
                     else:
-                        print(f"[StoreManager] ⚠️ Requirements install had issues:")
-                        print(f"[StoreManager] STDERR: {result.stderr}")
-                        if result.stdout:
-                            print(f"[StoreManager] STDOUT: {result.stdout}")
+                        print(f"[StoreManager] ⚠️ .venv not found, Poetry may be using global cache")
                 else:
-                    print(f"[StoreManager] No requirements.txt found for {server_id}")
+                    print(f"[StoreManager] ⚠️ Poetry install had issues:")
+                    print(f"[StoreManager] STDERR: {result.stderr}")
+                    if result.stdout:
+                        print(f"[StoreManager] STDOUT: {result.stdout}")
                     
             except Exception as ve:
-                print(f"[StoreManager] ❌ MCP venv/setup error for {server_id}: {ve}")
+                print(f"[StoreManager] ❌ Poetry setup error for MCP '{server_id}': {ve}")
                 import traceback
                 traceback.print_exc()
 
