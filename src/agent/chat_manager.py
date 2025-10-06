@@ -795,42 +795,10 @@ class ChatManager:
             return f"❌ Check failed: {e}"
     
     def _setup_mcp_environment(self, server_id: str) -> bool:
-        """Set up the environment for an MCP server."""
-        try:
-            server_dir = self.store_root / "mcp" / server_id
-            requirements_file = server_dir / "requirements.txt"
-            
-            print(f"[ChatManager] Setting up MCP environment for {server_id}")
-            
-            # Install requirements if they exist
-            if requirements_file.exists():
-                requirements_content = requirements_file.read_text(encoding="utf-8").strip()
-                if requirements_content:
-                    print(f"[ChatManager] Installing requirements for {server_id}...")
-                    
-                    pip_process = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
-                        cwd=str(server_dir),
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if pip_process.returncode != 0:
-                        print(f"[ChatManager] Failed to install requirements for {server_id}: {pip_process.stderr}")
-                        return False
-                    else:
-                        print(f"[ChatManager] Requirements installed successfully for {server_id}")
-                else:
-                    print(f"[ChatManager] No requirements to install for {server_id}")
-            else:
-                print(f"[ChatManager] No requirements.txt found for {server_id}")
-            
-            print(f"[ChatManager] Environment setup completed for {server_id}")
-            return True
-                
-        except Exception as e:
-            print(f"[ChatManager] Environment setup error for {server_id}: {e}")
-            return False
+        """Set up the environment for an MCP server - delegates to StoreManager."""
+        # StoreManager handles all installation and setup via store-manager.sh
+        print(f"[ChatManager] MCP server '{server_id}' managed by StoreManager")
+        return True
     
     def _setup_enabled_mcp_environments(self):
         """Set up environments for all enabled MCP servers."""

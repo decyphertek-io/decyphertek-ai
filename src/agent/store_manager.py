@@ -237,10 +237,14 @@ build-backend = "poetry.core.masonry.api"
                     text=True
                 )
                 
+                # Always print output for debugging
+                if result.stdout:
+                    print(f"[StoreManager] Script output:\n{result.stdout}")
+                if result.stderr:
+                    print(f"[StoreManager] Script errors:\n{result.stderr}")
+                
                 if result.returncode != 0:
-                    print(f"[StoreManager] Poetry install output:")
-                    print(f"  STDOUT: {result.stdout}")
-                    print(f"  STDERR: {result.stderr}")
+                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for agent '{agent_id}'")
@@ -366,10 +370,14 @@ build-backend = "poetry.core.masonry.api"
                     text=True
                 )
                 
+                # Always print output for debugging
+                if result.stdout:
+                    print(f"[StoreManager] Script output:\n{result.stdout}")
+                if result.stderr:
+                    print(f"[StoreManager] Script errors:\n{result.stderr}")
+                
                 if result.returncode != 0:
-                    print(f"[StoreManager] Poetry install output:")
-                    print(f"  STDOUT: {result.stdout}")
-                    print(f"  STDERR: {result.stderr}")
+                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for MCP '{server_id}'")
@@ -984,10 +992,14 @@ build-backend = "poetry.core.masonry.api"
                     text=True
                 )
                 
+                # Always print output for debugging
+                if result.stdout:
+                    print(f"[StoreManager] Script output:\n{result.stdout}")
+                if result.stderr:
+                    print(f"[StoreManager] Script errors:\n{result.stderr}")
+                
                 if result.returncode != 0:
-                    print(f"[StoreManager] Poetry install output:")
-                    print(f"  STDOUT: {result.stdout}")
-                    print(f"  STDERR: {result.stderr}")
+                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
                     return {"success": False, "error": f"Poetry setup failed: {result.stderr}"}
             
             # Fallback to requirements.txt for apps without pyproject.toml

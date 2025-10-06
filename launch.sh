@@ -67,20 +67,18 @@ else
 fi
 echo ""
 
-# Setup Poetry environment in data directory
+# Setup Poetry environment in project directory
 echo -e "${YELLOW}[4/6] Setting up Poetry environment...${NC}"
 
-# Configure Poetry to create venv in data directory
-export POETRY_VIRTUALENVS_PATH="$DATA_DIR"
-export POETRY_VIRTUALENVS_IN_PROJECT=false
+# Configure Poetry to create .venv in project directory (not global)
+export POETRY_VIRTUALENVS_IN_PROJECT=true
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 
-# Check if virtual environment exists in data directory
-VENV_PATH="$DATA_DIR/.venv"
+# Check if virtual environment exists in project
+VENV_PATH=".venv"
 if [ ! -d "$VENV_PATH" ]; then
-    echo -e "${BLUE}  Creating new Poetry virtual environment in $DATA_DIR/.venv${NC}"
-    poetry config virtualenvs.path "$DATA_DIR"
-    poetry env use python3
+    echo -e "${BLUE}  Creating new Poetry virtual environment in .venv${NC}"
+    poetry install --no-root
     echo -e "${GREEN}✓ Virtual environment created${NC}"
 else
     echo -e "${GREEN}✓ Virtual environment exists${NC}"
@@ -93,7 +91,12 @@ fi
 echo ""
 
 echo -e "${YELLOW}[5/6] Installing dependencies with Poetry...${NC}"
-poetry install --no-root
+if [ -d "$VENV_PATH" ]; then
+    echo -e "${GREEN}✓ Dependencies already installed${NC}"
+else
+    poetry install --no-root
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
+fi
 echo -e "${GREEN}✓ Poetry environment ready${NC}"
 echo ""
 
