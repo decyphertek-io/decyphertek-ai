@@ -136,15 +136,6 @@ class StoreManager:
         agents = self.registry.get("agents", {})
         return agents.get(agent_id, {})
 
-    def _contents_api_url(self, repo_url: str, folder_path: str, ref: str = "main") -> str:
-        # repo_url: https://github.com/owner/repo
-        try:
-            parts = repo_url.rstrip("/").split("/")
-            owner, repo = parts[-2], parts[-1]
-        except Exception:
-            owner, repo = "decyphertek-io", "agent-store"
-        folder = folder_path.strip("/")
-        return f"https://api.github.com/repos/{owner}/{repo}/contents/{folder}?ref={ref}"
 
     def _raw_url(self, repo_url: str, path: str, ref: str = "main") -> str:
         try:
@@ -369,30 +360,6 @@ class StoreManager:
                 "details": f"Exception during reinstall of MCP server '{server_id}'"
             }
 
-    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
-        url = self._contents_api_url(repo_url, folder_path, ref)
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            items = json.loads(resp.read().decode("utf-8"))
-
-        if isinstance(items, dict) and items.get("message"):
-            raise RuntimeError(items.get("message"))
-
-        for item in items:
-            itype = item.get("type")
-            name = item.get("name")
-            path = item.get("path")  # repo-relative path
-            download_url = item.get("download_url")
-
-            if itype == "file" and download_url:
-                target = dest_dir / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with urllib.request.urlopen(download_url, timeout=20) as fsrc, open(target, "wb") as fdst:
-                    fdst.write(fsrc.read())
-            elif itype == "dir":
-                sub_dest = dest_dir / name
-                sub_dest.mkdir(parents=True, exist_ok=True)
-                self._download_contents_recursive(repo_url, path, sub_dest, ref)
-            # symlink/submodule ignored for now
 
     # --------------------
     # Enabled state persist
@@ -826,9 +793,15 @@ class StoreManager:
 
     def install_app(self, app_id: str) -> Dict[str, Any]:
         """Download, install, and setup a Flet app from the app store"""
+        print(f"[StoreManager] Installing app: {app_id}")
         if not self.app_registry:
+            print(f"[StoreManager] Fetching app registry from: {self.app_registry_url}")
             self.fetch_app_registry()
+        
+        print(f"[StoreManager] App registry: {self.app_registry}")
         info = self.app_registry.get("apps", {}).get(app_id)
+        print(f"[StoreManager] App info for {app_id}: {info}")
+        
         if not info:
             return {"success": False, "error": f"Unknown app: {app_id}"}
         repo_url = info.get("repo_url")

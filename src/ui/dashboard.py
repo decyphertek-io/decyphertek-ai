@@ -883,7 +883,7 @@ class DashboardView:
         if self._apps_tab_content is not None:
             return self._apps_tab_content
         from ui.app_store import AdminView
-        admin_view = AdminView(self.page, lambda: None)
+        admin_view = AdminView(self.page, lambda: None, self.store_manager)
         admin_content = admin_view.build()
         self._apps_tab_content = ft.Container(
             content=admin_content.content,
