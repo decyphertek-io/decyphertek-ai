@@ -198,7 +198,7 @@ class ChatView:
                 ft.Container(
                     content=ft.Column(
                         controls=[
-                            # Thinking toggle and settings row
+                            # Thinking toggle and tools row
                             ft.Row(
                                 controls=[
                                     # Thinking toggle
@@ -224,6 +224,9 @@ class ChatView:
                                         alignment=ft.MainAxisAlignment.START
                                     ),
                                     ft.Container(expand=True),
+                                    # Tools: Docs and Terminal buttons
+                                    self.docs_button,
+                                    self.terminal_button,
                                     # Quick settings gear
                                     ft.IconButton(
                                         icon=ft.icons.SETTINGS,
@@ -244,10 +247,6 @@ class ChatView:
                                         tooltip="Upload Document to RAG",
                                         on_click=self._on_upload_click
                                     ),
-                                    # Docs button (paper icon for troubleshooting notes)
-                                    self.docs_button,
-                                    # Terminal button (terminal icon for command line access)
-                                    self.terminal_button,
                                     self.input_field,
                                     self.send_button
                                 ],
