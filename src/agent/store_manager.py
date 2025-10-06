@@ -231,8 +231,10 @@ build-backend = "poetry.core.masonry.api"
                 build_script = dest_dir / "build.sh"
                 
                 if build_script.exists():
+                    print(f"[StoreManager] Running: bash {build_script}")
                     result = subprocess.run(
                         ["bash", str(build_script)],
+                        cwd=str(dest_dir),  # CRITICAL: Run in component directory!
                         check=False,
                         capture_output=True,
                         text=True
@@ -252,12 +254,6 @@ build-backend = "poetry.core.masonry.api"
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for agent '{agent_id}'")
-                    # Verify .venv exists
-                    venv_dir = dest_dir / ".venv"
-                    if venv_dir.exists():
-                        print(f"[StoreManager] ✅ .venv directory created at {venv_dir}")
-                    else:
-                        print(f"[StoreManager] ⚠️ .venv not found, Poetry may be using global cache")
                 else:
                     print(f"[StoreManager] ⚠️ Poetry install had issues:")
                     print(f"[StoreManager] STDERR: {result.stderr}")
@@ -368,8 +364,10 @@ build-backend = "poetry.core.masonry.api"
                 build_script = dest_dir / "build.sh"
                 
                 if build_script.exists():
+                    print(f"[StoreManager] Running: bash {build_script}")
                     result = subprocess.run(
                         ["bash", str(build_script)],
+                        cwd=str(dest_dir),  # CRITICAL: Run in component directory!
                         check=False,
                         capture_output=True,
                         text=True
@@ -389,30 +387,6 @@ build-backend = "poetry.core.masonry.api"
                 
                 if result.returncode == 0:
                     print(f"[StoreManager] ✅ Poetry environment set up successfully for MCP '{server_id}'")
-                    # Verify .venv exists
-                    venv_dir = dest_dir / ".venv"
-                    if venv_dir.exists():
-                        print(f"[StoreManager] ✅ .venv directory created at {venv_dir}")
-                        
-                        # Verify key packages if this is web-search
-                        if server_id == "web-search":
-                            poetry_show = subprocess.run(
-                                ["poetry", "show"],
-                                cwd=str(dest_dir),
-                                check=False,
-                                capture_output=True,
-                                text=True
-                            )
-                            if poetry_show.returncode == 0:
-                                installed = poetry_show.stdout.lower()
-                                if "duckduckgo" in installed:
-                                    print(f"[StoreManager] ✅ Verified: duckduckgo-search")
-                                if "requests" in installed:
-                                    print(f"[StoreManager] ✅ Verified: requests")
-                                if "mcp" in installed:
-                                    print(f"[StoreManager] ✅ Verified: mcp")
-                    else:
-                        print(f"[StoreManager] ⚠️ .venv not found, Poetry may be using global cache")
                 else:
                     print(f"[StoreManager] ⚠️ Poetry install had issues:")
                     print(f"[StoreManager] STDERR: {result.stderr}")
@@ -994,8 +968,10 @@ build-backend = "poetry.core.masonry.api"
                 build_script = dest_dir / "build.sh"
                 
                 if build_script.exists():
+                    print(f"[StoreManager] Running: bash {build_script}")
                     result = subprocess.run(
                         ["bash", str(build_script)],
+                        cwd=str(dest_dir),  # CRITICAL: Run in component directory!
                         check=False,
                         capture_output=True,
                         text=True
