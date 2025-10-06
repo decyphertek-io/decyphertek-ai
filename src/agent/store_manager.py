@@ -330,6 +330,9 @@ class StoreManager:
                 installed_files = []
                 if server_dir.exists():
                     installed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
+                # Verify venv rebuilt
+                venv_dir = server_dir / ".venv"
+                venv_rebuilt = venv_dir.exists()
                 
                 # Find the actual script file for feedback
                 script_path = None
@@ -349,12 +352,16 @@ class StoreManager:
                 
                 return {
                     "success": True,
-                    "message": f"MCP Server '{server_id}' reinstalled successfully",
+                    "message": (
+                        f"MCP Server '{server_id}' reinstalled successfully. "
+                        f"Old .venv deleted and new .venv {'created' if venv_rebuilt else 'not found'}"
+                    ),
                     "details": {
                         "removed_files": removed_files,
                         "installed_files": installed_files,
                         "server_id": server_id,
                         "script_path": str(script_path) if script_path else "Script not found",
+                        "venv_rebuilt": venv_rebuilt,
                         "status": "Ready for use"
                     }
                 }
@@ -491,72 +498,6 @@ class StoreManager:
         self.mcp_enabled_state[server_id] = bool(enabled)
         self._save_enabled_state_generic(self.mcp_enabled_state_path, self.mcp_enabled_state)
 
-    def install_mcp_server(self, server_id: str) -> Dict[str, Any]:
-        if not self.mcp_registry:
-            self.fetch_mcp_registry()
-        info = self.mcp_registry.get("servers", {}).get(server_id)
-        if not info:
-            return {"success": False, "error": f"Unknown server: {server_id}"}
-        repo_url = info.get("repo_url")
-        folder_path = info.get("folder_path")
-        if not repo_url or not folder_path:
-            return {"success": False, "error": "Missing repo_url or folder_path"}
-
-        dest_root = self.mcp_store_root
-        dest_root.mkdir(parents=True, exist_ok=True)
-        dest_dir = dest_root / server_id
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            self._download_contents_recursive(repo_url, folder_path, dest_dir)
-            
-            # Check what files were downloaded
-            downloaded_files = [f.name for f in dest_dir.iterdir() if f.is_file()]
-            
-            # create venv and install requirements if present
-            venv_dir = dest_dir / ".venv"
-            requirements_installed = False
-            try:
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
-                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-                req = dest_dir / "requirements.txt"
-                if req.exists():
-                    result = subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
-                    requirements_installed = result.returncode == 0
-            except Exception as ve:
-                print(f"[StoreManager] MCP venv/setup error for {server_id}: {ve}")
-
-            if info.get("enable_by_default", False):
-                self.set_mcp_enabled(server_id, True)
-            
-            # Find the actual script file for feedback
-            script_path = None
-            possible_names = [
-                f"{server_id}.py",  # web-search.py
-                "main.py",          # main.py
-                "web.py",           # web.py (for web-search)
-                "server.py",        # server.py
-                "app.py"            # app.py
-            ]
-            
-            for script_name in possible_names:
-                potential_path = dest_dir / script_name
-                if potential_path.exists():
-                    script_path = potential_path
-                    break
-            
-            return {
-                "success": True, 
-                "message": f"Installed '{server_id}'",
-                "details": {
-                    "downloaded_files": downloaded_files,
-                    "requirements_installed": requirements_installed,
-                    "server_id": server_id,
-                    "script_path": str(script_path) if script_path else "Script not found",
-                    "enabled_by_default": info.get("enable_by_default", False)
-                }
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
     def _start_mcp_background_sync(self) -> None:
         """Auto-install and enable default MCP servers, then refresh cache for UI."""
