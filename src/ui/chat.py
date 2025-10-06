@@ -59,6 +59,7 @@ class ChatView:
         self.rag_toggle = None
         self.ollama_toggle = None
         self.use_rag = True  # RAG enabled by default
+        self.editor_open = False  # Track editor state
         self.show_thinking = True  # Show thinking by default
         
         # Sidebar state
@@ -272,19 +273,40 @@ class ChatView:
         )
     
     def _on_docs_click(self, e):
-        """Handle docs button click - show troubleshooting notes overlay"""
-        print("[Chat] Docs button clicked!")
+        """Handle docs button click - launch integrated text editor"""
+        print("[Chat] Docs button clicked - launching editor!")
         try:
-            from ui.docs_overlay import create_docs_overlay
-            create_docs_overlay(self.page)
+            if self.editor_open:
+                # Close editor if already open
+                print("[Chat] Editor already open, closing it")
+                self._close_editor()
+                return
+            
+            # Launch editor
+            from ui.editor import launch_editor
+            launch_editor(self)
+            self.editor_open = True
+            
         except Exception as ex:
-            print(f"[Chat] Error showing docs overlay: {ex}")
+            print(f"[Chat] Error launching editor: {ex}")
             self.page.show_snack_bar(
                 ft.SnackBar(
-                    content=ft.Text(f"Error opening docs: {ex}"),
+                    content=ft.Text(f"Error opening editor: {ex}"),
                     bgcolor=ft.colors.RED
                 )
             )
+    
+    def _close_editor(self):
+        """Close the integrated editor"""
+        try:
+            # Remove editor from chat list
+            self.chat_list.controls = [control for control in self.chat_list.controls 
+                                      if not hasattr(control, 'editor_container')]
+            self.editor_open = False
+            self.page.update()
+            print("[Chat] Editor closed")
+        except Exception as ex:
+            print(f"[Chat] Error closing editor: {ex}")
     
     def _on_file_picked(self, e: ft.FilePickerResultEvent):
         """Handle file picker result"""
