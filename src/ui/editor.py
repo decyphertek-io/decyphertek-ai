@@ -66,7 +66,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
         multiline=True,
         min_lines=20,
         max_lines=20,
-        hint_text="Type your notes here... Modern Tron-style editor",
+        hint_text="Type your notes here... Modern text editor",
         border_color=ft.colors.CYAN_400,
         bgcolor=ft.colors.BLACK,
         color=ft.colors.CYAN_300,
@@ -79,7 +79,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
     
     # Visual mode indicator (just for looks)
     mode_indicator = ft.Text(
-        "-- TRON MODE --",
+        "-- EDIT MODE --",
         size=12,
         weight=ft.FontWeight.BOLD,
         color=ft.colors.CYAN_400,
@@ -231,7 +231,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
                         controls=[
                             ft.Row(
                                 controls=[
-                                    ft.Text("⚡ TRON EDITOR ⚡", 
+                                    ft.Text("⚡ TEXT EDITOR ⚡", 
                                            size=16, weight=ft.FontWeight.BOLD, color=ft.colors.CYAN_400,
                                            font_family="monospace"),
                                     ft.Container(expand=True),  # Spacer
@@ -248,7 +248,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
                                 controls=[
                                     mode_indicator,
                                     ft.Container(expand=True),
-                                    ft.Text("Modern Tron-style text editor", 
+                                    ft.Text("Modern text editor with cyberpunk theme", 
                                            size=10, color=ft.colors.CYAN_300, font_family="monospace")
                                 ],
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN
@@ -293,7 +293,7 @@ This is your personal notes editor. Use the Admin Guide for system diagnostic co
                 ft.Container(
                     content=ft.Column(
                         controls=[
-                            ft.Text("✏️ TRON EDITOR (Modern Text Editor)", 
+                            ft.Text("✏️ TEXT EDITOR (Modern Editor)", 
                                    weight=ft.FontWeight.BOLD, size=12, color=ft.colors.CYAN_400,
                                    font_family="monospace"),
                             quicknotes_field,

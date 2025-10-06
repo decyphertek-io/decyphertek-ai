@@ -165,14 +165,14 @@ def launch_docs_menu(chat_view):
                                         ft.Column(
                                             controls=[
                                                 ft.Text(
-                                                    "Tron Editor",
+                                                    "Text Editor",
                                                     weight=ft.FontWeight.BOLD,
                                                     size=14,
                                                     color=ft.colors.CYAN_300,
                                                     font_family="monospace"
                                                 ),
                                                 ft.Text(
-                                                    "Modern Tron-style text editor for notes and documents",
+                                                    "Modern text editor for notes and documents",
                                                     size=10,
                                                     color=ft.colors.CYAN_200,
                                                     font_family="monospace"
