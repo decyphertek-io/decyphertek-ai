@@ -106,7 +106,7 @@ dist/
 .github/secrets/
 
 # Mobile build
-#android/
+android/
 ios/
 web/
 windows/
