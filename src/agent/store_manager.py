@@ -646,8 +646,12 @@ class StoreManager:
                 "PATH": os.environ.get("PATH", "")
             })
             
+            # Prefer server's virtualenv Python if available
+            venv_python = server_dir / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            python_exec = str(venv_python) if venv_python.exists() else sys.executable
+
             process = subprocess.run(
-                [sys.executable, str(script_path)],
+                [python_exec, str(script_path)],
                 input=json.dumps(test_payload).encode("utf-8"),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

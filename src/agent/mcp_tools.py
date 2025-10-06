@@ -12,9 +12,22 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 
-from langchain.tools import Tool
-from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+
+# Lightweight local Tool replacement (to avoid LangChain dependency)
+from typing import Callable
+
+
+class Tool:
+    """Minimal tool wrapper compatible with current app usage."""
+
+    def __init__(self, name: str, func: Callable, description: str):
+        self.name = name
+        self.func = func
+        self.description = description
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
 
 
 class WebSearchInput(BaseModel):
@@ -193,7 +206,7 @@ class MCPToolkit:
             return result['content']
         elif isinstance(result, str):
             return result
-            else:
+        else:
             return str(result)
     
     def _format_search_results(self, results: list, title: str) -> str:
@@ -293,23 +306,22 @@ class MCPToolkit:
         tools = []
         
         # Add tools from discovered MCP servers
-        for server_name, server_info in self.available_servers.items():
-            if server_name == "web-search":
-                # Web Search Tool (direct DuckDuckGo implementation)
-                if self.ddgs:
-            web_search_tool = Tool(
-                name="web_search",
-                func=lambda q: self.web_search_sync(q, 5),
-                description=(
-                    "Search the web using DuckDuckGo. "
-                    "Input should be a search query string. "
-                    "Returns a list of relevant web pages with titles, URLs, and snippets. "
-                    "Use this when you need current information, facts, or to research topics."
+        for server_name, _server_info in self.available_servers.items():
+            if server_name == "web-search" and self.ddgs:
+                tools.append(
+                    Tool(
+                        name="web_search",
+                        func=lambda q: self.web_search_sync(q, 5),
+                        description=(
+                            "Search the web using DuckDuckGo. "
+                            "Input should be a search query string. "
+                            "Returns a list of relevant web pages with titles, URLs, and snippets. "
+                            "Use this when you need current information, facts, or to research topics."
+                        ),
+                    )
                 )
-            )
-            tools.append(web_search_tool)
-            
-                    video_search_tool = Tool(
+                tools.append(
+                    Tool(
                         name="search_videos",
                         func=lambda q: self.video_search_sync(q, 3),
                         description=(
@@ -317,24 +329,21 @@ class MCPToolkit:
                             "Input should be a search query string. "
                             "Returns video results with titles, descriptions, and URLs. "
                             "Use this when the user asks for videos, YouTube content, or multimedia."
-                        )
+                        ),
                     )
-                    tools.append(video_search_tool)
-                    
-                    image_search_tool = Tool(
+                )
+                tools.append(
+                    Tool(
                         name="search_images",
                         func=lambda q: self.image_search_sync(q, 5),
-                description=(
+                        description=(
                             "Search for images. "
                             "Input should be a search query string. "
                             "Returns image results with titles and URLs. "
                             "Use this when the user asks for images, pictures, or visual content."
-                        )
+                        ),
                     )
-                    tools.append(image_search_tool)
-            
-            # Add other MCP server tools here as they become available
-            # Example: google-drive, nextcloud, whatsapp, etc.
+                )
         
         # Launch App Tool
         launch_app_tool = Tool(
@@ -390,7 +399,7 @@ class OllamaManagementInput(BaseModel):
     model: Optional[str] = Field(default=None, description="Model name for pull action")
 
 
-class OllamaTool(BaseTool):
+class OllamaTool:
     """
     Tool for managing Ollama models
     Allows agent to pull models, list installed, etc.
