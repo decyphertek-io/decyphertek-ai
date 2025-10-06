@@ -383,24 +383,33 @@ class ChatView:
             
             print(f"[Chat] Uploading {file.name} ({len(content)} chars) via chat_manager")
             
-            # Use chat_manager to handle the upload
-            if hasattr(self, 'chat_manager') and self.chat_manager:
-                result = self.chat_manager.upload_document(file.name, content)
-                
-                if result.get("success"):
-                    self._add_message("system", f"✅ Document '{file.name}' uploaded to storage successfully!")
-                    print(f"[Chat] Document {file.name} uploaded successfully")
+            # Use DocumentManager directly for proper RAG integration
+            if hasattr(self, 'doc_manager') and self.doc_manager:
+                try:
+                    # Add document to DocumentManager (this will store in the right place)
+                    success = self.doc_manager.add_document(content, file.name, source="chat_upload")
                     
-                    # Notify RAG view to refresh
-                    if self.on_document_uploaded:
-                        self.on_document_uploaded()
-                else:
-                    error_msg = result.get("error", "Unknown error")
-                    self._add_message("system", f"❌ Upload failed: {error_msg}")
-                    print(f"[Chat] Upload failed: {error_msg}")
+                    if success:
+                        self._add_message("system", f"✅ Document '{file.name}' uploaded to RAG storage successfully!")
+                        print(f"[Chat] Document {file.name} uploaded to RAG successfully")
+                        
+                        # Notify RAG view to refresh
+                        if self.on_document_uploaded:
+                            self.on_document_uploaded()
+                    else:
+                        self._add_message("system", f"⚠️ Document '{file.name}' already exists in RAG storage")
+                        print(f"[Chat] Document {file.name} already exists in RAG")
+                        
+                        # Still refresh the view to show existing documents
+                        if self.on_document_uploaded:
+                            self.on_document_uploaded()
+                            
+                except Exception as e:
+                    self._add_message("system", f"❌ Upload failed: {str(e)}")
+                    print(f"[Chat] Upload error: {e}")
             else:
-                self._add_message("system", f"⚠️ Chat manager not available - cannot upload document")
-                print("[Chat] Chat manager not available")
+                self._add_message("system", f"⚠️ Document manager not available - cannot upload document")
+                print("[Chat] Document manager not available")
                 
         except Exception as e:
             print(f"[Chat] Upload error: {e}")

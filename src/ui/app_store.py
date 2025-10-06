@@ -46,14 +46,19 @@ class AdminView:
             logger.error(f"[AppStore] cache write error: {e}")
 
     def _normalize_app(self, app_id: str, info: dict) -> dict:
+        installed = self.store.is_app_installed(app_id) if hasattr(self.store, "is_app_installed") else False
+        ready = self.store.is_app_ready(app_id) if hasattr(self.store, "is_app_ready") else False
+        enabled = self.store.is_app_enabled(app_id) if hasattr(self.store, "is_app_enabled") else False
+        
         return {
             "id": app_id,
             "name": info.get("name") or app_id,
             "description": info.get("description") or "",
             "icon": ft.icons.APPS,
             "color": ft.colors.BLUE_400,
-            "installed": self.store.is_app_installed(app_id) if hasattr(self.store, "is_app_installed") else False,
-            "enabled": self.store.is_app_enabled(app_id) if hasattr(self.store, "is_app_enabled") else False,
+            "installed": installed,
+            "ready": ready,
+            "enabled": enabled,
         }
 
     def _ensure_background_sync(self):
@@ -170,23 +175,26 @@ class AdminView:
                                     expand=True,
                                 ),
                                 ft.Row([
+                                    # Download button - show when not installed
                                     ft.IconButton(
                                         icon=ft.icons.DOWNLOAD,
-                                        tooltip="Download",
+                                        tooltip="Download & Setup",
                                         on_click=lambda _, a=app: self._on_download(a),
                                         visible=not app.get("installed", False),
                                     ),
+                                    # Play button - show when installed, ready, and enabled
                                     ft.IconButton(
                                         icon=ft.icons.PLAY_ARROW,
                                         tooltip="Launch App",
                                         on_click=lambda _, a=app: self._on_launch(a),
-                                        visible=app.get("installed", False) and app.get("enabled", False),
+                                        visible=app.get("installed", False) and app.get("ready", False) and app.get("enabled", False),
                                         icon_color=ft.colors.GREEN_600,
                                     ),
+                                    # Enable/Disable switch - show when installed and ready
                                     ft.Switch(
                                         value=app.get("enabled", False),
                                         on_change=lambda e, a=app: self._on_toggle_enabled(a, e.control.value),
-                                        visible=app.get("installed", False),
+                                        visible=app.get("installed", False) and app.get("ready", False),
                                     ),
                                 ], spacing=6),
                             ],
@@ -204,22 +212,28 @@ class AdminView:
         app_id = app.get("id") or app.get("name")
         if not app_id:
             return
-        self._show_success(f"Downloading {app_id}...")
+        self._show_success(f"Downloading and setting up {app_id}...")
 
         def _bg():
             try:
                 res = self.store.install_app(app_id) if hasattr(self.store, "install_app") else {"success": False, "error": "installer missing"}
                 if res.get("success"):
+                    # Update app state
                     for a in self.apps:
                         if a.get("id") == app_id:
                             a["installed"] = True
-                            a["enabled"] = a.get("enabled", False)
+                            a["ready"] = res.get("ready_to_run", False)
+                            a["enabled"] = res.get("ready_to_run", False)  # Auto-enable if ready
                             break
-                    self._show_success(f"Installed {app_id}")
+                    
+                    if res.get("ready_to_run"):
+                        self._show_success(f"✅ {app_id} installed and ready to run!")
+                    else:
+                        self._show_success(f"✅ {app_id} installed successfully")
                 else:
-                    self._show_error(f"Install failed: {res.get('error')}")
+                    self._show_error(f"❌ Install failed: {res.get('error')}")
             except Exception as e:
-                self._show_error(f"Install error: {e}")
+                self._show_error(f"❌ Install error: {e}")
             finally:
                 self._refresh_view()
 
@@ -247,46 +261,46 @@ class AdminView:
         
         def _launch_app():
             try:
-                # Get the app installation path
-                app_path = self.local_root / app_id
-                if not app_path.exists():
-                    self._show_error(f"App {app_id} not found at {app_path}")
+                # Get launch info from store manager
+                launch_info = self.store.get_app_launch_info(app_id) if hasattr(self.store, "get_app_launch_info") else None
+                
+                if not launch_info or not launch_info.get("success"):
+                    error_msg = launch_info.get("error", "Unknown error") if launch_info else "Store manager not available"
+                    self._show_error(f"❌ Cannot launch {app_id}: {error_msg}")
                     return
                 
-                # Find the main.py file
-                main_py = app_path / "src" / "main.py"
-                if not main_py.exists():
-                    # Try alternative paths
-                    main_py = app_path / "main.py"
-                    if not main_py.exists():
-                        self._show_error(f"main.py not found for {app_id}")
-                        return
+                main_script = Path(launch_info["main_script"])
+                if not main_script.exists():
+                    self._show_error(f"❌ Main script not found: {main_script}")
+                    return
                 
                 # Launch the app in a new window
-                self._launch_flet_app(app_id, main_py)
+                self._launch_flet_app(app_id, main_script)
                 
             except Exception as e:
-                self._show_error(f"Launch failed: {e}")
+                self._show_error(f"❌ Launch failed: {e}")
         
         threading.Thread(target=_launch_app, daemon=True).start()
     
     def _launch_flet_app(self, app_id: str, main_py_path: Path):
-        """Launch a Flet app in a new window"""
+        """Launch a Flet app within the chat window"""
         try:
             # Check if app is already running
             if app_id in self.running_apps:
-                self._show_error(f"{app_id} is already running")
+                self._show_error(f"❌ {app_id} is already running")
                 return
             
-            # Create a new Flet app window
+            # For now, launch in external window
+            # TODO: Integrate with chat window for Flet-in-Flet experience
             app_window = FletAppWindow(app_id, main_py_path, self.page, self)
             app_window.show()
             
             # Track the running app
             self.running_apps[app_id] = app_window
+            self._show_success(f"✅ {app_id} launched successfully!")
             
         except Exception as e:
-            self._show_error(f"Failed to create app window: {e}")
+            self._show_error(f"❌ Failed to launch {app_id}: {e}")
 
 
 class FletAppWindow:

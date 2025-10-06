@@ -26,6 +26,7 @@ Source of truth registry:
 
 import json
 import os
+import time
 import urllib.request
 from pathlib import Path
 import threading
@@ -824,6 +825,7 @@ class StoreManager:
         self._save_enabled_state_generic(self.app_enabled_state_path, self.app_enabled_state)
 
     def install_app(self, app_id: str) -> Dict[str, Any]:
+        """Download, install, and setup a Flet app from the app store"""
         if not self.app_registry:
             self.fetch_app_registry()
         info = self.app_registry.get("apps", {}).get(app_id)
@@ -838,20 +840,120 @@ class StoreManager:
         dest_root.mkdir(parents=True, exist_ok=True)
         dest_dir = dest_root / app_id
         dest_dir.mkdir(parents=True, exist_ok=True)
+        
         try:
+            print(f"[StoreManager] Downloading {app_id} from {repo_url}/{folder_path}")
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
-            venv_dir = dest_dir / ".venv"
-            try:
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
-                vpy = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-                req = dest_dir / "requirements.txt"
-                if req.exists():
-                    subprocess.run([str(vpy), "-m", "pip", "install", "-r", str(req)], check=False, cwd=str(dest_dir), capture_output=True, text=True)
-            except Exception as ve:
-                print(f"[StoreManager] App venv/setup error for {app_id}: {ve}")
+            
+            # Setup environment and dependencies
+            print(f"[StoreManager] Setting up environment for {app_id}")
+            setup_result = self._setup_app_environment(app_id, dest_dir)
+            if not setup_result["success"]:
+                return setup_result
+            
+            # Mark app as ready to run
+            self._mark_app_ready(app_id, dest_dir)
+            
             if info.get("enable_by_default", False):
                 self.set_app_enabled(app_id, True)
-            return {"success": True, "message": f"Installed '{app_id}'"}
+                
+            return {
+                "success": True, 
+                "message": f"Installed and setup '{app_id}' successfully",
+                "app_path": str(dest_dir),
+                "main_script": setup_result.get("main_script", ""),
+                "ready_to_run": True
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _setup_app_environment(self, app_id: str, dest_dir: Path) -> Dict[str, Any]:
+        """Setup the app environment including dependencies"""
+        try:
+            # For Chaquopy compatibility, install directly to system Python
+            # instead of creating virtual environments
+            req_file = dest_dir / "requirements.txt"
+            if req_file.exists():
+                print(f"[StoreManager] Installing requirements for {app_id}")
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "-r", str(req_file)],
+                    cwd=str(dest_dir),
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode != 0:
+                    print(f"[StoreManager] Requirements install warning for {app_id}: {result.stderr}")
+            
+            # Find the main script
+            main_script = self._find_main_script(dest_dir)
+            if not main_script:
+                return {"success": False, "error": "No main.py or main script found"}
+            
+            return {
+                "success": True,
+                "main_script": str(main_script),
+                "message": f"Environment setup complete for {app_id}"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Environment setup failed: {e}"}
+    
+    def _find_main_script(self, dest_dir: Path) -> Path | None:
+        """Find the main script for the Flet app"""
+        # Common patterns for Flet app main scripts
+        possible_paths = [
+            dest_dir / "src" / "main.py",
+            dest_dir / "main.py",
+            dest_dir / "app.py",
+            dest_dir / "src" / "app.py"
+        ]
+        
+        for path in possible_paths:
+            if path.exists():
+                return path
+        
+        return None
+    
+    def _mark_app_ready(self, app_id: str, dest_dir: Path) -> None:
+        """Mark an app as ready to run by creating a ready state file"""
+        try:
+            ready_file = dest_dir / ".ready"
+            ready_file.write_text(f"ready_at={int(time.time())}\napp_id={app_id}\npath={dest_dir}")
+            print(f"[StoreManager] Marked {app_id} as ready to run")
+        except Exception as e:
+            print(f"[StoreManager] Warning: Could not mark {app_id} as ready: {e}")
+    
+    def is_app_ready(self, app_id: str) -> bool:
+        """Check if an app is ready to run"""
+        try:
+            app_dir = self.app_local_root / app_id
+            ready_file = app_dir / ".ready"
+            return ready_file.exists()
+        except:
+            return False
+    
+    def get_app_launch_info(self, app_id: str) -> Dict[str, Any]:
+        """Get information needed to launch an app"""
+        try:
+            app_dir = self.app_local_root / app_id
+            if not app_dir.exists():
+                return {"success": False, "error": f"App {app_id} not installed"}
+            
+            if not self.is_app_ready(app_id):
+                return {"success": False, "error": f"App {app_id} not ready to run"}
+            
+            main_script = self._find_main_script(app_dir)
+            if not main_script:
+                return {"success": False, "error": f"No main script found for {app_id}"}
+            
+            return {
+                "success": True,
+                "app_id": app_id,
+                "app_dir": str(app_dir),
+                "main_script": str(main_script),
+                "ready": True
+            }
+            
         except Exception as e:
             return {"success": False, "error": str(e)}
 
