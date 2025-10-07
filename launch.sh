@@ -67,37 +67,32 @@ else
 fi
 echo ""
 
-# Setup Poetry environment in project directory
-echo -e "${YELLOW}[4/6] Setting up Poetry environment...${NC}"
+# Setup centralized virtual environment in $DATA_DIR/.venv and install with Poetry into it
+echo -e "${YELLOW}[4/6] Setting up centralized virtual environment...${NC}"
 
-# Configure Poetry to create .venv in project directory (not global)
-export POETRY_VIRTUALENVS_IN_PROJECT=true
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+CENTRAL_VENV="$DATA_DIR/.venv"
 
-# Check if virtual environment exists in project
-VENV_PATH=".venv"
-if [ ! -d "$VENV_PATH" ]; then
-    echo -e "${BLUE}  Creating new Poetry virtual environment in .venv${NC}"
-    poetry install --no-root
+if [ ! -d "$CENTRAL_VENV" ]; then
+    echo -e "${BLUE}  Creating virtual environment at $CENTRAL_VENV${NC}"
+    python3 -m venv "$CENTRAL_VENV"
     echo -e "${GREEN}✓ Virtual environment created${NC}"
 else
-    echo -e "${GREEN}✓ Virtual environment exists${NC}"
-    # Check if dependencies need updating
-    if [ "$1" == "--update" ] || [ "$1" == "-u" ]; then
-        echo -e "${BLUE}  Updating dependencies...${NC}"
-        poetry update
-    fi
+    echo -e "${GREEN}✓ Central virtual environment exists${NC}"
 fi
-echo ""
 
-echo -e "${YELLOW}[5/6] Installing dependencies with Poetry...${NC}"
-if [ -d "$VENV_PATH" ]; then
-    echo -e "${GREEN}✓ Dependencies already installed${NC}"
+echo -e "${YELLOW}[5/6] Installing dependencies into centralized venv via Poetry...${NC}"
+# Install dependencies into the active venv (disable Poetry's venv creation)
+source "$CENTRAL_VENV/bin/activate"
+export POETRY_VIRTUALENVS_CREATE=false
+
+if [ "$1" == "--update" ] || [ "$1" == "-u" ]; then
+    echo -e "${BLUE}  Updating dependencies...${NC}"
+    poetry update
 else
     poetry install --no-root
-    echo -e "${GREEN}✓ Dependencies installed${NC}"
 fi
-echo -e "${GREEN}✓ Poetry environment ready${NC}"
+echo -e "${GREEN}✓ Dependencies ready in $CENTRAL_VENV${NC}"
 echo ""
 
 echo -e "${YELLOW}[6/6] Launching DecypherTek AI...${NC}"
@@ -106,5 +101,5 @@ echo -e "${GREEN}Data directory: $DATA_DIR${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Launch the app
-poetry run python src/main.py
+# Launch the app using the centralized venv's Python
+"$CENTRAL_VENV/bin/python" src/main.py
