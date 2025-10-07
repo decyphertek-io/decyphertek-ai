@@ -70,6 +70,7 @@ class ChatView:
         self.use_rag = True  # RAG enabled by default
         self.editor_open = False  # Track editor state
         self.show_thinking = True  # Show thinking by default
+        self.web_search_enabled = False  # New toggle: disable by default
         
         # Sidebar state
         self.sidebar_visible = False
@@ -226,6 +227,28 @@ class ChatView:
                                                 value=self.show_thinking,
                                                 on_change=self._toggle_thinking,
                                                 active_color=ft.colors.BLUE_400,
+                                            )
+                                        ],
+                                        spacing=8,
+                                        alignment=ft.MainAxisAlignment.START
+                                    ),
+                                    # Web Search toggle
+                                    ft.Row(
+                                        controls=[
+                                            ft.Icon(
+                                                ft.icons.PUBLIC,
+                                                size=16,
+                                                color=ft.colors.GREEN_600 if self.web_search_enabled else ft.colors.GREY_400
+                                            ),
+                                            ft.Text(
+                                                "Web Search",
+                                                size=12,
+                                                color=ft.colors.GREEN_600 if self.web_search_enabled else ft.colors.GREY_400
+                                            ),
+                                            ft.Switch(
+                                                value=self.web_search_enabled,
+                                                on_change=self._toggle_web_search,
+                                                active_color=ft.colors.GREEN_400,
                                             )
                                         ],
                                         spacing=8,
@@ -453,7 +476,11 @@ class ChatView:
         try:
             # Use chat manager for all message processing
             if self.chat_manager:
-                response = await self.chat_manager.process_message(user_message, self.messages)
+                # Attach web search preference to history context
+                # so ChatManager can pass it to the agent
+                context_note = {"meta": {"web_search_enabled": self.web_search_enabled}}
+                history_with_pref = self.messages + [{"role": "system", "content": json.dumps(context_note)}]
+                response = await self.chat_manager.process_message(user_message, history_with_pref)
             else:
                 # Fallback to direct API if no chat manager
                 print(f"[Chat] No chat manager, using direct API")
@@ -657,6 +684,15 @@ class ChatView:
         
         print(f"[Chat] Thinking {'enabled' if self.show_thinking else 'disabled'}")
     
+    def _toggle_web_search(self, e):
+        """Toggle Web Search on/off"""
+        self.web_search_enabled = not self.web_search_enabled
+        ft.SnackBar(
+            content=ft.Text(f"Web Search {'enabled' if self.web_search_enabled else 'disabled'}"),
+            bgcolor=ft.colors.GREEN if self.web_search_enabled else ft.colors.GREY
+        ).open = True
+        print(f"[Chat] Web Search {'enabled' if self.web_search_enabled else 'disabled'}")
+
     def _show_quick_settings(self, e):
         """Show quick model settings dialog"""
         # Get current provider and available models

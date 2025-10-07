@@ -100,7 +100,7 @@ class ChatManager:
                 "history": message_history
             }
             
-            # Prepare env (propagate API key if available)
+            # Prepare env (propagate API key and web search preference if available)
             env_vars = None
             try:
                 import os as _os
@@ -109,6 +109,16 @@ class ChatManager:
                     api_key = getattr(self.ai_client, "api_key", None)
                     if api_key:
                         env_vars["OPENROUTER_API_KEY"] = api_key
+                # Inspect last system message for preferences
+                if message_history:
+                    try:
+                        last = message_history[-1]
+                        if last.get("role") == "system":
+                            meta = json.loads(last.get("content", "{}")).get("meta", {})
+                            if isinstance(meta, dict) and meta.get("web_search_enabled") is True:
+                                env_vars["WEB_SEARCH_ENABLED"] = "1"
+                    except Exception:
+                        pass
             except Exception:
                 env_vars = None
 
