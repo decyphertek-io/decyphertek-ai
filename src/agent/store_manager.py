@@ -201,13 +201,22 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh as login shell to get proper PATH
+            # Run build.sh using shell=True (same as manual execution)
             import subprocess
             result = subprocess.run(
-                ["bash", "-l", "build.sh"],
-                cwd=str(dest_dir),
-                shell=False
+                f"cd '{dest_dir}' && bash build.sh",
+                shell=True,
+                executable="/bin/bash"
             )
+            
+            # Check if .venv was actually created
+            venv_path = dest_dir / ".venv"
+            if venv_path.exists():
+                print(f"[StoreManager] ✅ .venv created at {venv_path}")
+            else:
+                print(f"[StoreManager] ❌ ERROR: .venv NOT found at {venv_path}")
+                print(f"[StoreManager] build.sh exit code was: {result.returncode}")
+            
             if result.returncode != 0:
                 print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
 
@@ -257,13 +266,22 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh as login shell to get proper PATH
+            # Run build.sh using shell=True (same as manual execution)
             import subprocess
             result = subprocess.run(
-                ["bash", "-l", "build.sh"],
-                cwd=str(dest_dir),
-                shell=False
+                f"cd '{dest_dir}' && bash build.sh",
+                shell=True,
+                executable="/bin/bash"
             )
+            
+            # Check if .venv was actually created
+            venv_path = dest_dir / ".venv"
+            if venv_path.exists():
+                print(f"[StoreManager] ✅ .venv created at {venv_path}")
+            else:
+                print(f"[StoreManager] ❌ ERROR: .venv NOT found at {venv_path}")
+                print(f"[StoreManager] build.sh exit code was: {result.returncode}")
+            
             if result.returncode != 0:
                 print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
 
