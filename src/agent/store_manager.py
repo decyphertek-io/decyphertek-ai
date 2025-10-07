@@ -205,23 +205,13 @@ class StoreManager:
             build_script = dest_dir / "build.sh"
             if build_script.exists():
                 print(f"[StoreManager] Running build.sh for '{agent_id}'...")
-                result = subprocess.run(
-                    ["bash", str(build_script)],
-                    cwd=str(dest_dir),
-                    check=False,
-                    capture_output=True,
-                    text=True
-                )
+                import os
+                exit_code = os.system(f"cd {dest_dir} && bash build.sh")
                 
-                if result.stdout:
-                    print(f"[StoreManager] Build output:\n{result.stdout}")
-                if result.stderr:
-                    print(f"[StoreManager] Build errors:\n{result.stderr}")
-                
-                if result.returncode == 0:
+                if exit_code == 0:
                     print(f"[StoreManager] ✅ Environment setup complete for '{agent_id}'")
                 else:
-                    print(f"[StoreManager] ⚠️ build.sh exited with code {result.returncode}")
+                    print(f"[StoreManager] ⚠️ build.sh exited with code {exit_code}")
             else:
                 print(f"[StoreManager] Warning: No build.sh found for '{agent_id}', skipping environment setup")
 
@@ -275,23 +265,13 @@ class StoreManager:
             build_script = dest_dir / "build.sh"
             if build_script.exists():
                 print(f"[StoreManager] Running build.sh for '{server_id}'...")
-                result = subprocess.run(
-                    ["bash", str(build_script)],
-                    cwd=str(dest_dir),
-                    check=False,
-                    capture_output=True,
-                    text=True
-                )
+                import os
+                exit_code = os.system(f"cd {dest_dir} && bash build.sh")
                 
-                if result.stdout:
-                    print(f"[StoreManager] Build output:\n{result.stdout}")
-                if result.stderr:
-                    print(f"[StoreManager] Build errors:\n{result.stderr}")
-                
-                if result.returncode == 0:
+                if exit_code == 0:
                     print(f"[StoreManager] ✅ Environment setup complete for '{server_id}'")
                 else:
-                    print(f"[StoreManager] ⚠️ build.sh exited with code {result.returncode}")
+                    print(f"[StoreManager] ⚠️ build.sh exited with code {exit_code}")
             else:
                 print(f"[StoreManager] Warning: No build.sh found for '{server_id}', skipping environment setup")
 
