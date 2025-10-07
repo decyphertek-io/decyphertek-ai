@@ -67,32 +67,21 @@ else
 fi
 echo ""
 
-# Setup centralized virtual environment in $DATA_DIR/.venv and install with Poetry into it
-echo -e "${YELLOW}[4/6] Setting up centralized virtual environment...${NC}"
+echo -e "${YELLOW}[4/6] Configuring Poetry environment location...${NC}"
 
+# Keep Poetry-managed virtualenvs, but store them under ~/.decyphertek-ai
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-CENTRAL_VENV="$DATA_DIR/.venv"
+export POETRY_VIRTUALENVS_IN_PROJECT=false
+export POETRY_VIRTUALENVS_PATH="$DATA_DIR"
 
-if [ ! -d "$CENTRAL_VENV" ]; then
-    echo -e "${BLUE}  Creating virtual environment at $CENTRAL_VENV${NC}"
-    python3 -m venv "$CENTRAL_VENV"
-    echo -e "${GREEN}✓ Virtual environment created${NC}"
-else
-    echo -e "${GREEN}✓ Central virtual environment exists${NC}"
-fi
-
-echo -e "${YELLOW}[5/6] Installing dependencies into centralized venv via Poetry...${NC}"
-# Install dependencies into the active venv (disable Poetry's venv creation)
-source "$CENTRAL_VENV/bin/activate"
-export POETRY_VIRTUALENVS_CREATE=false
-
+echo -e "${YELLOW}[5/6] Installing dependencies with Poetry...${NC}"
 if [ "$1" == "--update" ] || [ "$1" == "-u" ]; then
     echo -e "${BLUE}  Updating dependencies...${NC}"
     poetry update
 else
     poetry install --no-root
 fi
-echo -e "${GREEN}✓ Dependencies ready in $CENTRAL_VENV${NC}"
+echo -e "${GREEN}✓ Poetry environment ready (stored under $DATA_DIR)${NC}"
 echo ""
 
 echo -e "${YELLOW}[6/6] Launching DecypherTek AI...${NC}"
@@ -101,5 +90,5 @@ echo -e "${GREEN}Data directory: $DATA_DIR${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Launch the app using the centralized venv's Python
-"$CENTRAL_VENV/bin/python" src/main.py
+# Launch the app via Poetry (uses the env under $DATA_DIR)
+poetry run python src/main.py
