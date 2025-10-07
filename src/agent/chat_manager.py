@@ -1363,16 +1363,10 @@ class ChatManager:
             return False
     
     def _create_adminotaur_script(self, script_path: Path) -> None:
-        """Create a basic adminotaur.py script if it doesn't exist."""
-        basic_script = '''#!/usr/bin/env python3
-"""
-Adminotaur Agent - Basic implementation for DecypherTek AI
-"""
+        """This function is deprecated - agents are managed by StoreManager."""
+        pass
 
-import json
-import sys
-from typing import Dict, Any, List
-
+# Adminotaur agent wrapper that calls the real agent via subprocess
 class AdminotaurAgent:
     """Adminotaur agent that runs via subprocess in its own .venv"""
     
