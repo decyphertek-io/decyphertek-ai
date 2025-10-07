@@ -958,6 +958,58 @@ class StoreManager:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+    
+    def upload_document(self, filename: str, content: str) -> Dict[str, Any]:
+        """Upload document to storage"""
+        try:
+            storage_dir = self.user_home / "documents"
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate unique filename
+            import time
+            timestamp = int(time.time() * 1000)
+            safe_filename = filename.replace(" ", "_").replace("/", "_")
+            stored_filename = f"{timestamp}_{safe_filename}"
+            file_path = storage_dir / stored_filename
+            
+            # Save file
+            file_path.write_text(content, encoding="utf-8")
+            
+            # Update metadata
+            docs_metadata_file = self.user_home / "documents.json"
+            documents = {}
+            if docs_metadata_file.exists():
+                try:
+                    documents = json.loads(docs_metadata_file.read_text(encoding="utf-8"))
+                except:
+                    documents = {}
+            
+            documents[stored_filename] = {
+                "original_filename": filename,
+                "stored_filename": stored_filename,
+                "file_path": str(file_path),
+                "size": len(content),
+                "uploaded_at": timestamp,
+                "source": "chat_upload"
+            }
+            
+            docs_metadata_file.write_text(json.dumps(documents, indent=2), encoding="utf-8")
+            
+            return {
+                "success": True,
+                "filename": filename,
+                "stored_filename": stored_filename,
+                "file_path": str(file_path),
+                "size": len(content),
+                "message": f"Document '{filename}' uploaded successfully"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Upload failed: {str(e)}"
+            }
 
 
 class DecypherTekAgent:
