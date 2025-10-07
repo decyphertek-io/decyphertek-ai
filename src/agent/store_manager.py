@@ -257,7 +257,14 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # No build or venv for MCP servers; they are expected to be runnable as-downloaded
+            # Make MCP binary executable if it exists
+            binary_name = f"{server_id}.mcp" if server_id != "web-search" else "web.mcp"
+            mcp_binary_path = dest_dir / binary_name
+            if mcp_binary_path.exists():
+                os.chmod(mcp_binary_path, 0o755)  # Make executable
+                print(f"[StoreManager] ✅ MCP binary '{binary_name}' made executable")
+            else:
+                print(f"[StoreManager] ⚠️ No MCP binary '{binary_name}' found. Assuming script execution.")
 
             # Enable by default if specified
             enable_by_default = info.get("enable_by_default", False)
