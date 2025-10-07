@@ -106,19 +106,10 @@ class DashboardView:
             self.chat_manager = None
     
     def _init_adminotaur_agent(self):
-        """Initialize Adminotaur agent for RAG integration"""
-        try:
-            if not self.adminotaur_agent:
-                # Initialize chat manager first
-                self._init_chat_manager()
-                
-                # Import AdminotaurAgent from the store
-                from store.agent.adminotaur.adminotaur import AdminotaurAgent
-                self.adminotaur_agent = AdminotaurAgent(self)
-                print("[Dashboard] Adminotaur agent initialized for RAG integration")
-        except Exception as e:
-            print(f"[Dashboard] Warning: Could not initialize Adminotaur agent: {e}")
-            self.adminotaur_agent = None
+        """Adminotaur is managed by chat_manager, not dashboard"""
+        # Dashboard should not initialize agents directly
+        # All agent interactions go through chat_manager
+        pass
     
     def _init_ai_client(self):
         """Initialize AI client and agent based on selected provider"""
