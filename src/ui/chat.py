@@ -443,19 +443,60 @@ class ChatView:
             self.page.update()
         
         try:
-            # Use ChatManager to process the message
-            from agent.chat_manager import ChatManager
-            chat_manager = ChatManager(
-                page=self.page,
-                ai_client=self.client
-            )
+            # Check if agent is enabled, otherwise use direct API
+            from pathlib import Path
+            agent_cache = Path.home() / ".decyphertek-ai" / "store" / "agent" / "cache.json"
             
-            print(f"[Chat] Processing message with ChatManager...")
-            response = await chat_manager.process_message(
-                user_message=user_message,
-                message_history=self.messages,
-                use_rag=self.use_rag
-            )
+            agent_enabled = False
+            if agent_cache.exists():
+                import json
+                cache_data = json.loads(agent_cache.read_text())
+                for agent_id, info in cache_data.items():
+                    if info.get("installed") and info.get("enabled"):
+                        agent_enabled = True
+                        break
+            
+            if agent_enabled:
+                # Call agent directly
+                print(f"[Chat] Agent enabled, routing to agent")
+                agent_dir = Path.home() / ".decyphertek-ai" / "store" / "agent" / "adminotaur"
+                venv_python = agent_dir / ".venv" / "bin" / "python"
+                agent_script = agent_dir / "adminotaur.py"
+                
+                if venv_python.exists() and agent_script.exists():
+                    import subprocess
+                    import json
+                    
+                    payload = {
+                        "message": user_message,
+                        "context": "",
+                        "history": self.messages
+                    }
+                    
+                    process = subprocess.run(
+                        [str(venv_python), str(agent_script)],
+                        input=json.dumps(payload).encode("utf-8"),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        cwd=str(agent_dir),
+                        timeout=120
+                    )
+                    
+                    if process.returncode == 0:
+                        output = process.stdout.decode("utf-8").strip()
+                        try:
+                            response_data = json.loads(output)
+                            response = response_data.get("text", response_data.get("response", str(response_data)))
+                        except:
+                            response = output
+                    else:
+                        response = f"⚠️ Agent error: {process.stderr.decode('utf-8')}"
+                else:
+                    response = "⚠️ Agent not properly installed"
+            else:
+                # No agent - use direct API
+                print(f"[Chat] No agent enabled, using direct API")
+                response = await self.client.send_message(self.messages)
             
             print(f"[Chat] Got response: {response[:100] if response else 'None'}...")
             
