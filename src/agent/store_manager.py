@@ -201,16 +201,15 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh - use subprocess instead of os.system
+            # Run build.sh as login shell to get proper PATH
             import subprocess
-            print(f"[StoreManager] Running build.sh in {dest_dir}")
             result = subprocess.run(
-                ["bash", "build.sh"],
+                ["bash", "-l", "build.sh"],
                 cwd=str(dest_dir),
-                shell=False,
-                capture_output=False
+                shell=False
             )
-            print(f"[StoreManager] build.sh exit code: {result.returncode}")
+            if result.returncode != 0:
+                print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
 
             # Enable by default if requested
             enable_by_default = info.get("enable_by_default", False)
@@ -258,16 +257,15 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh - use subprocess instead of os.system
+            # Run build.sh as login shell to get proper PATH
             import subprocess
-            print(f"[StoreManager] Running build.sh in {dest_dir}")
             result = subprocess.run(
-                ["bash", "build.sh"],
+                ["bash", "-l", "build.sh"],
                 cwd=str(dest_dir),
-                shell=False,
-                capture_output=False
+                shell=False
             )
-            print(f"[StoreManager] build.sh exit code: {result.returncode}")
+            if result.returncode != 0:
+                print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
 
             # Enable by default if specified
             enable_by_default = info.get("enable_by_default", False)
