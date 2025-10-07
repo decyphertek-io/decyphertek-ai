@@ -1374,21 +1374,54 @@ import sys
 from typing import Dict, Any, List
 
 class AdminotaurAgent:
-    """Basic Adminotaur agent implementation."""
+    """Adminotaur agent that runs via subprocess in its own .venv"""
     
     def __init__(self, main_class=None):
         self.main_class = main_class
         self.page = main_class.page if main_class else None
+        # Path to adminotaur in the store
+        self.agent_dir = Path.home() / ".decyphertek-ai" / "store" / "agent" / "adminotaur"
+        self.venv_python = self.agent_dir / ".venv" / "bin" / "python"
+        self.agent_script = self.agent_dir / "adminotaur.py"
     
     def chat(self, message: str, context: str = "", history: List[Dict] = None) -> str:
-        """Handle chat messages."""
-        if message.lower() in ["health_check", "health", "ready"]:
-            return "Decyphertek AI is ready"
+        """Handle chat messages by calling adminotaur.py via subprocess."""
+        if not self.venv_python.exists():
+            return "Error: Adminotaur .venv not found. Please install Adminotaur from Agent Store."
         
-        return f"Adminotaur received: {message}"
+        if not self.agent_script.exists():
+            return "Error: adminotaur.py not found. Please install Adminotaur from Agent Store."
+        
+        try:
+            import subprocess
+            import json
+            
+            # Prepare input data
+            input_data = {
+                "message": message,
+                "context": context or "",
+                "history": history or []
+            }
+            
+            # Call adminotaur.py via its .venv python
+            result = subprocess.run(
+                [str(self.venv_python), str(self.agent_script)],
+                input=json.dumps(input_data),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                response_data = json.loads(result.stdout)
+                return response_data.get("text", "No response")
+            else:
+                return f"Error running Adminotaur: {result.stderr}"
+        except Exception as e:
+            return f"Error: {e}"
 
 def main():
-    """Main entry point for the agent."""
+    """Main entry point for standalone agent testing."""
     try:
         # Read input from stdin
         input_data = json.loads(sys.stdin.read())
@@ -1413,9 +1446,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
-        script_path.write_text(basic_script, encoding="utf-8")
-        print(f"[ChatManager] Created basic adminotaur script at {script_path}")
     
     def _auto_setup_adminotaur_with_feedback(self) -> str:
         """Auto-setup adminotaur with verbose feedback."""
