@@ -192,78 +192,38 @@ class StoreManager:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # List directory items via GitHub Contents API
+            # Download files from GitHub
+            print(f"[StoreManager] Downloading '{agent_id}' from GitHub...")
             with urllib.request.urlopen(contents_url, timeout=20) as resp:
                 listing = json.loads(resp.read().decode("utf-8"))
             if isinstance(listing, dict) and listing.get("message"):
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
+            print(f"[StoreManager] ✅ Download complete")
 
-            # Use Poetry to manage dependencies
-            try:
-                print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
+            # Run build.sh to set up the environment
+            build_script = dest_dir / "build.sh"
+            if build_script.exists():
+                print(f"[StoreManager] Running build.sh for '{agent_id}'...")
+                result = subprocess.run(
+                    ["bash", str(build_script)],
+                    cwd=str(dest_dir),
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
                 
-                # Check if requirements.txt exists (convert to Poetry if needed)
-                req = dest_dir / "requirements.txt"
-                pyproject = dest_dir / "pyproject.toml"
-                
-                if req.exists() and not pyproject.exists():
-                    print(f"[StoreManager] Converting requirements.txt to Poetry format...")
-                    # Create basic pyproject.toml
-                    pyproject_content = f"""[tool.poetry]
-name = "{agent_id}"
-version = "1.0.0"
-description = "Agent: {agent_id}"
-authors = ["DecypherTek <decyphertek@proton.me>"]
-
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-"""
-                    pyproject.write_text(pyproject_content)
-                    print(f"[StoreManager] Created pyproject.toml")
-                
-                # Use the component's build.sh script (same approach as launch.sh)
-                print(f"[StoreManager] Setting up Poetry environment for agent '{agent_id}'...")
-                build_script = dest_dir / "build.sh"
-                
-                if build_script.exists():
-                    print(f"[StoreManager] Running: bash {build_script}")
-                    result = subprocess.run(
-                        ["bash", str(build_script)],
-                        cwd=str(dest_dir),  # CRITICAL: Run in component directory!
-                        check=False,
-                        capture_output=True,
-                        text=True
-                    )
-                else:
-                    print(f"[StoreManager] Warning: No build.sh found for '{agent_id}'")
-                    result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-                
-                # Always print output for debugging
                 if result.stdout:
-                    print(f"[StoreManager] Script output:\n{result.stdout}")
+                    print(f"[StoreManager] Build output:\n{result.stdout}")
                 if result.stderr:
-                    print(f"[StoreManager] Script errors:\n{result.stderr}")
-                
-                if result.returncode != 0:
-                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
+                    print(f"[StoreManager] Build errors:\n{result.stderr}")
                 
                 if result.returncode == 0:
-                    print(f"[StoreManager] ✅ Poetry environment set up successfully for agent '{agent_id}'")
+                    print(f"[StoreManager] ✅ Environment setup complete for '{agent_id}'")
                 else:
-                    print(f"[StoreManager] ⚠️ Poetry install had issues:")
-                    print(f"[StoreManager] STDERR: {result.stderr}")
-                    if result.stdout:
-                        print(f"[StoreManager] STDOUT: {result.stdout}")
-                    
-            except Exception as ve:
-                print(f"[StoreManager] ❌ Poetry setup error for agent '{agent_id}': {ve}")
-                import traceback
-                traceback.print_exc()
+                    print(f"[StoreManager] ⚠️ build.sh exited with code {result.returncode}")
+            else:
+                print(f"[StoreManager] Warning: No build.sh found for '{agent_id}', skipping environment setup")
 
             # Enable by default if requested
             enable_by_default = info.get("enable_by_default", False)
@@ -302,101 +262,38 @@ build-backend = "poetry.core.masonry.api"
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # List directory items via GitHub Contents API
+            # Download files from GitHub
+            print(f"[StoreManager] Downloading '{server_id}' from GitHub...")
             with urllib.request.urlopen(contents_url, timeout=20) as resp:
                 listing = json.loads(resp.read().decode("utf-8"))
             if isinstance(listing, dict) and listing.get("message"):
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
+            print(f"[StoreManager] ✅ Download complete")
 
-            # Use Poetry to manage dependencies
-            try:
-                print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
+            # Run build.sh to set up the environment
+            build_script = dest_dir / "build.sh"
+            if build_script.exists():
+                print(f"[StoreManager] Running build.sh for '{server_id}'...")
+                result = subprocess.run(
+                    ["bash", str(build_script)],
+                    cwd=str(dest_dir),
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
                 
-                # Check if requirements.txt exists (convert to Poetry if needed)
-                req = dest_dir / "requirements.txt"
-                pyproject = dest_dir / "pyproject.toml"
-                
-                if req.exists() and not pyproject.exists():
-                    print(f"[StoreManager] Converting requirements.txt to Poetry format...")
-                    # Parse requirements.txt
-                    requirements = []
-                    for line in req.read_text().splitlines():
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            requirements.append(line)
-                    
-                    # Build dependencies section
-                    deps_lines = ['python = "^3.10"']
-                    for req_line in requirements:
-                        # Convert pip format to poetry format
-                        # e.g., "duckduckgo-search>=8.1.1" -> 'duckduckgo-search = ">=8.1.1"'
-                        if '>=' in req_line:
-                            pkg, ver = req_line.split('>=')
-                            deps_lines.append(f'{pkg.strip()} = ">={ver.strip()}"')
-                        elif '==' in req_line:
-                            pkg, ver = req_line.split('==')
-                            deps_lines.append(f'{pkg.strip()} = "{ver.strip()}"')
-                        else:
-                            deps_lines.append(f'{req_line} = "*"')
-                    
-                    deps_section = '\n'.join(deps_lines)
-                    
-                    # Create pyproject.toml with actual dependencies
-                    pyproject_content = f"""[tool.poetry]
-name = "mcp-{server_id}"
-version = "1.0.0"
-description = "MCP Server: {server_id}"
-authors = ["DecypherTek <decyphertek@proton.me>"]
-
-[tool.poetry.dependencies]
-{deps_section}
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-"""
-                    pyproject.write_text(pyproject_content)
-                    print(f"[StoreManager] Created pyproject.toml with dependencies from requirements.txt")
-                
-                # Use the component's build.sh script (same approach as launch.sh)
-                print(f"[StoreManager] Setting up Poetry environment for MCP server '{server_id}'...")
-                build_script = dest_dir / "build.sh"
-                
-                if build_script.exists():
-                    print(f"[StoreManager] Running: bash {build_script}")
-                    result = subprocess.run(
-                        ["bash", str(build_script)],
-                        cwd=str(dest_dir),  # CRITICAL: Run in component directory!
-                        check=False,
-                        capture_output=True,
-                        text=True
-                    )
-                else:
-                    print(f"[StoreManager] Warning: No build.sh found for '{server_id}'")
-                    result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-                
-                # Always print output for debugging
                 if result.stdout:
-                    print(f"[StoreManager] Script output:\n{result.stdout}")
+                    print(f"[StoreManager] Build output:\n{result.stdout}")
                 if result.stderr:
-                    print(f"[StoreManager] Script errors:\n{result.stderr}")
-                
-                if result.returncode != 0:
-                    print(f"[StoreManager] ❌ Script failed with return code {result.returncode}")
+                    print(f"[StoreManager] Build errors:\n{result.stderr}")
                 
                 if result.returncode == 0:
-                    print(f"[StoreManager] ✅ Poetry environment set up successfully for MCP '{server_id}'")
+                    print(f"[StoreManager] ✅ Environment setup complete for '{server_id}'")
                 else:
-                    print(f"[StoreManager] ⚠️ Poetry install had issues:")
-                    print(f"[StoreManager] STDERR: {result.stderr}")
-                    if result.stdout:
-                        print(f"[StoreManager] STDOUT: {result.stdout}")
-                    
-            except Exception as ve:
-                print(f"[StoreManager] ❌ Poetry setup error for MCP '{server_id}': {ve}")
-                import traceback
-                traceback.print_exc()
+                    print(f"[StoreManager] ⚠️ build.sh exited with code {result.returncode}")
+            else:
+                print(f"[StoreManager] Warning: No build.sh found for '{server_id}', skipping environment setup")
 
             # Enable by default if specified
             enable_by_default = info.get("enable_by_default", False)
@@ -482,46 +379,44 @@ build-backend = "poetry.core.masonry.api"
                 print(f"[StoreManager] Removed existing {server_id} installation (including .venv)")
             
             # Reinstall
+            print(f"[StoreManager] Calling install_mcp_server for '{server_id}'...")
             install_result = self.install_mcp_server(server_id)
+            print(f"[StoreManager] install_mcp_server returned: {install_result}")
             
             if install_result.get("success"):
-                # Check what was actually installed
-                installed_files = []
-                if server_dir.exists():
-                    installed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
-                # Verify venv rebuilt
+                # Health check: verify installation
                 venv_dir = server_dir / ".venv"
-                venv_rebuilt = venv_dir.exists()
+                venv_exists = venv_dir.exists()
+                build_script_exists = (server_dir / "build.sh").exists()
                 
-                # Find the actual script file for feedback
+                # Find the actual script file
                 script_path = None
-                possible_names = [
-                    f"{server_id}.py",  # web-search.py
-                    "main.py",          # main.py
-                    "web.py",           # web.py (for web-search)
-                    "server.py",        # server.py
-                    "app.py"            # app.py
-                ]
-                
+                possible_names = [f"{server_id}.py", "main.py", "web.py", "rag.py", "server.py", "app.py"]
                 for script_name in possible_names:
                     potential_path = server_dir / script_name
                     if potential_path.exists():
                         script_path = potential_path
                         break
                 
+                # Build status message
+                if venv_exists and build_script_exists:
+                    status = "✅ Ready for use (.venv created)"
+                elif build_script_exists and not venv_exists:
+                    status = "⚠️ build.sh found but .venv missing"
+                elif not build_script_exists:
+                    status = "⚠️ No build.sh found, no environment setup"
+                else:
+                    status = "Unknown"
+                
                 return {
                     "success": True,
-                    "message": (
-                        f"MCP Server '{server_id}' reinstalled successfully. "
-                        f"Old .venv deleted and new .venv {'created' if venv_rebuilt else 'not found'}"
-                    ),
+                    "message": f"MCP Server '{server_id}' reinstalled successfully",
                     "details": {
-                        "removed_files": removed_files,
-                        "installed_files": installed_files,
                         "server_id": server_id,
                         "script_path": str(script_path) if script_path else "Script not found",
-                        "venv_rebuilt": venv_rebuilt,
-                        "status": "Ready for use"
+                        "venv_exists": venv_exists,
+                        "build_script_exists": build_script_exists,
+                        "status": status
                     }
                 }
             else:
