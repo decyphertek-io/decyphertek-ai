@@ -447,8 +447,7 @@ class ChatView:
             from agent.chat_manager import ChatManager
             chat_manager = ChatManager(
                 page=self.page,
-                ai_client=self.client,
-                document_manager=self.doc_manager
+                ai_client=self.client
             )
             
             print(f"[Chat] Processing message with ChatManager...")
