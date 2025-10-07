@@ -423,28 +423,26 @@ class ChatManager:
         if user_message.strip() == "!list":
             return self._handle_list_command()
         
-        # Check for agent command
-        if user_message.strip().startswith("!agent "):
-            agent_payload = user_message.strip()[7:]
-            print(f"[ChatManager] Agent command detected: {agent_payload}")
-            return self.process_agent_command(agent_payload, rag_context, message_history)
-        
-        # Check for tool command (e.g., !tool web-search:search "query")
-        if user_message.strip().startswith("!tool "):
-            tool_spec = user_message.strip()[6:]
-            print(f"[ChatManager] Tool command detected: {tool_spec}")
-            return self._process_tool_command(tool_spec)
-        
-        # Check if an agent is available and enabled
+        # PRIORITY: Check if an agent is available and enabled
+        # If yes, route ALL messages (including tool commands) through the agent
         enabled_agent = self.get_enabled_agent()
         if enabled_agent:
-            print(f"[ChatManager] Agent '{enabled_agent.get('id')}' is enabled, routing through agent")
+            print(f"[ChatManager] Agent '{enabled_agent.get('id')}' is enabled, routing ALL messages through agent")
             try:
                 # Route through the enabled agent
                 return self.process_agent_command(user_message, rag_context, message_history)
             except Exception as e:
                 print(f"[ChatManager] Agent processing error: {e}")
                 return f"⚠️ Error processing with agent: {e}"
+        
+        # Only if NO agent is enabled, handle commands directly
+        # Check for agent command
+        if user_message.strip().startswith("!agent "):
+            return "ℹ️ No agent is currently enabled. Install and enable an agent from the Agents tab to use agent commands."
+        
+        # Check for tool command (e.g., !tool web-search:search "query")
+        if user_message.strip().startswith("!tool "):
+            return "ℹ️ Tool commands require an agent. Install and enable an agent from the Agents tab to use MCP tools."
         
         # Fallback: Direct LLM chat (when no agent is available)
         if not self.ai_client:
