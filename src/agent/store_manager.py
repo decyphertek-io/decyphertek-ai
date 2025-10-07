@@ -257,24 +257,7 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh using shell=True (same as manual execution)
-            import subprocess
-            result = subprocess.run(
-                f"cd '{dest_dir}' && bash build.sh",
-                shell=True,
-                executable="/bin/bash"
-            )
-            
-            # Check if .venv was actually created
-            venv_path = dest_dir / ".venv"
-            if venv_path.exists():
-                print(f"[StoreManager] ✅ .venv created at {venv_path}")
-            else:
-                print(f"[StoreManager] ❌ ERROR: .venv NOT found at {venv_path}")
-                print(f"[StoreManager] build.sh exit code was: {result.returncode}")
-            
-            if result.returncode != 0:
-                print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
+            # No build or venv for MCP servers; they are expected to be runnable as-downloaded
 
             # Enable by default if specified
             enable_by_default = info.get("enable_by_default", False)
@@ -345,19 +328,15 @@ class StoreManager:
                     "details": f"Available servers: {', '.join(available_servers) if available_servers else 'None'}"
                 }
             
-            # Remove existing installation (including .venv)
+            # Remove existing installation
             server_dir = self.mcp_store_root / server_id
             removed_files = []
             if server_dir.exists():
                 import shutil
                 # List files before removal for feedback
                 removed_files = [f.name for f in server_dir.iterdir() if f.is_file()]
-                # Also remove .venv if it exists
-                venv_dir = server_dir / ".venv"
-                if venv_dir.exists():
-                    removed_files.append(".venv")
                 shutil.rmtree(server_dir)
-                print(f"[StoreManager] Removed existing {server_id} installation (including .venv)")
+                print(f"[StoreManager] Removed existing {server_id} installation")
             
             # Reinstall
             print(f"[StoreManager] Calling install_mcp_server for '{server_id}'...")
@@ -366,13 +345,20 @@ class StoreManager:
             
             if install_result.get("success"):
                 # Health check: verify installation
-                venv_dir = server_dir / ".venv"
-                venv_exists = venv_dir.exists()
                 build_script_exists = (server_dir / "build.sh").exists()
                 
-                # Find the actual script file
+                # Find the actual script or binary file
                 script_path = None
-                possible_names = [f"{server_id}.py", "main.py", "web.py", "rag.py", "server.py", "app.py"]
+                possible_names = [
+                    f"{server_id}.agent",
+                    f"{server_id}",
+                    f"{server_id}.py",
+                    "main.py",
+                    "web.py",
+                    "rag.py",
+                    "server.py",
+                    "app.py"
+                ]
                 for script_name in possible_names:
                     potential_path = server_dir / script_name
                     if potential_path.exists():
@@ -380,22 +366,14 @@ class StoreManager:
                         break
                 
                 # Build status message
-                if venv_exists and build_script_exists:
-                    status = "✅ Ready for use (.venv created)"
-                elif build_script_exists and not venv_exists:
-                    status = "⚠️ build.sh found but .venv missing"
-                elif not build_script_exists:
-                    status = "⚠️ No build.sh found, no environment setup"
-                else:
-                    status = "Unknown"
+                status = "✅ Installed"
                 
                 return {
                     "success": True,
                     "message": f"MCP Server '{server_id}' reinstalled successfully",
                     "details": {
                         "server_id": server_id,
-                        "script_path": str(script_path) if script_path else "Script not found",
-                        "venv_exists": venv_exists,
+                        "script_path": str(script_path) if script_path else "Entry not found",
                         "build_script_exists": build_script_exists,
                         "status": status
                     }
@@ -655,26 +633,13 @@ class StoreManager:
             if self.mcp_registry:
                 server_info = self.mcp_registry.get("servers", {}).get(server_id, {})
             
-            # Check if venv exists and is functional
-            venv_dir = server_dir / ".venv"
-            venv_python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            venv_exists = venv_dir.exists()
-            venv_functional = venv_python.exists()
-            
             # Check if pyproject.toml and poetry.lock exist
             pyproject_exists = (server_dir / "pyproject.toml").exists()
             poetry_lock_exists = (server_dir / "poetry.lock").exists()
             
-            # Determine status
-            if not venv_exists:
-                status = "❌ No .venv - Poetry install failed"
-                ready = False
-            elif not venv_functional:
-                status = "⚠️ .venv exists but Python not found"
-                ready = False
-            else:
-                status = "✅ Ready (venv configured)"
-                ready = True
+            # Determine status (no venv management here)
+            ready = script_path is not None
+            status = "✅ Ready" if ready else "❌ Entry point not found"
             
             return {
                 "success": True,
@@ -683,9 +648,6 @@ class StoreManager:
                     "server_id": server_id,
                     "script_path": str(script_path),
                     "enabled": is_enabled,
-                    "venv_exists": venv_exists,
-                    "venv_functional": venv_functional,
-                    "venv_python": str(venv_python) if venv_functional else "Not found",
                     "pyproject_exists": pyproject_exists,
                     "poetry_lock_exists": poetry_lock_exists,
                     "name": server_info.get("name", server_id),
@@ -732,7 +694,10 @@ class StoreManager:
         folder = folder_path.strip("/")
         return f"https://api.github.com/repos/{owner}/{repo}/contents/{folder}?ref={ref}"
 
-    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main") -> None:
+    def _download_contents_recursive(self, repo_url: str, folder_path: str, dest_dir: Path, ref: str = "main", exclude_dirs: List[str] | None = None) -> None:
+        """Download folder contents from GitHub Contents API, skipping excluded directories (e.g., 'src')."""
+        if exclude_dirs is None:
+            exclude_dirs = ["src"]
         dest_dir.mkdir(parents=True, exist_ok=True)
         url = self._contents_api_url(repo_url, folder_path, ref)
         with urllib.request.urlopen(url, timeout=20) as resp:
@@ -750,7 +715,10 @@ class StoreManager:
                 with urllib.request.urlopen(download_url, timeout=20) as fsrc, open(target, "wb") as fdst:
                     fdst.write(fsrc.read())
             elif itype == "dir":
-                self._download_contents_recursive(repo_url, path, dest_dir / name, ref)
+                # Skip unwanted directories
+                if name in exclude_dirs:
+                    continue
+                self._download_contents_recursive(repo_url, path, dest_dir / name, ref, exclude_dirs)
 
     # ---------------
     # App Store methods
