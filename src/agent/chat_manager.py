@@ -1365,8 +1365,31 @@ class ChatManager:
     def _create_adminotaur_script(self, script_path: Path) -> None:
         """This function is deprecated - agents are managed by StoreManager."""
         pass
+    
+    def get_enabled_agent(self) -> Optional[Dict[str, Any]]:
+        """Get the currently enabled agent from cache."""
+        try:
+            cache_path = self.store_root / "agent" / "cache.json"
+            if not cache_path.exists():
+                print("[ChatManager] No agent cache found")
+                return None
+                
+            cache_data = json.loads(cache_path.read_text(encoding="utf-8"))
+            
+            for agent_id, info in cache_data.items():
+                if isinstance(info, dict) and info.get("installed") and info.get("enabled"):
+                    print(f"[ChatManager] Found enabled agent: {agent_id}")
+                    return {"id": agent_id, **info}
+                    
+            print("[ChatManager] No enabled agent found")
+            return None
+        except Exception as e:
+            print(f"[ChatManager] Error reading agent cache: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
-# Adminotaur agent wrapper that calls the real agent via subprocess
+# Adminotauragent wrapper that calls the real agent via subprocess
 class AdminotaurAgent:
     """Adminotaur agent that runs via subprocess in its own .venv"""
     
@@ -1438,173 +1461,23 @@ def main():
         print(json.dumps(error_result))
         sys.exit(1)
 
-if __name__ == "__main__":
-    main()
-    
-    def _auto_setup_adminotaur_with_feedback(self) -> str:
-        """Auto-setup adminotaur with verbose feedback."""
-        feedback_lines = ["🔧 **Setting up Adminotaur Agent Environment:**\n"]
-        
-        try:
-            agent_dir = self.store_root / "agent" / "adminotaur"
-            agent_dir.mkdir(parents=True, exist_ok=True)
-            feedback_lines.append("✅ Created agent directory")
-            
-            # Fetch agent registry
-            feedback_lines.append("📡 Fetching agent registry...")
-            registry = self.fetch_agent_registry()
-            if not registry or "agents" not in registry:
-                feedback_lines.append("❌ Failed to fetch agent registry")
-                return "\n".join(feedback_lines)
-            feedback_lines.append("✅ Agent registry fetched successfully")
-            
-            adminotaur_info = registry["agents"].get("adminotaur")
-            if not adminotaur_info:
-                feedback_lines.append("❌ Adminotaur not found in registry")
-                return "\n".join(feedback_lines)
-            feedback_lines.append("✅ Found adminotaur in registry")
-            
-            # Create adminotaur.py
-            script_path = agent_dir / "adminotaur.py"
-            if not script_path.exists():
-                feedback_lines.append("📝 Creating adminotaur.py script...")
-                self._create_adminotaur_script(script_path)
-                feedback_lines.append("✅ adminotaur.py created successfully")
-            else:
-                feedback_lines.append("✅ adminotaur.py already exists")
-            
-            # Create requirements.txt
-            requirements_path = agent_dir / "requirements.txt"
-            if not requirements_path.exists():
-                feedback_lines.append("📋 Creating requirements.txt...")
-                requirements_path.write_text("requests\nbeautifulsoup4\n", encoding="utf-8")
-                feedback_lines.append("✅ requirements.txt created")
-            else:
-                feedback_lines.append("✅ requirements.txt already exists")
-            
-            # Install requirements
-            if requirements_path.exists():
-                feedback_lines.append("📦 Installing requirements...")
-                requirements_content = requirements_path.read_text(encoding="utf-8").strip()
-                if requirements_content:
-                    pip_process = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)],
-                        cwd=str(agent_dir),
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if pip_process.returncode == 0:
-                        feedback_lines.append("✅ Requirements installed successfully")
-                        feedback_lines.append(f"📄 Pip output: {pip_process.stdout.strip()}")
-                    else:
-                        feedback_lines.append("⚠️ Requirements installation had issues")
-                        feedback_lines.append(f"📄 Pip error: {pip_process.stderr.strip()}")
-                else:
-                    feedback_lines.append("✅ No requirements to install")
-            
-            # Update cache
-            feedback_lines.append("💾 Updating agent cache...")
-            if self.agent_cache_path.exists():
-                cache_data = json.loads(self.agent_cache_path.read_text(encoding="utf-8"))
-            else:
-                cache_data = {}
-            
-            cache_data["adminotaur"] = {
-                **adminotaur_info,
-                "installed": True,
-                "enabled": True
-            }
-            
-            self.agent_cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
-            feedback_lines.append("✅ Agent cache updated")
-            
-            # Test the agent
-            feedback_lines.append("🧪 Testing agent functionality...")
-            test_payload = {
-                "message": "health_check",
-                "context": "",
-                "history": []
-            }
-            
-            env_vars = os.environ.copy()
-            env_vars.update({
-                "PYTHONPATH": str(agent_dir),
-                "PATH": os.environ.get("PATH", "")
-            })
-            
-            process = subprocess.run(
-                [sys.executable, str(script_path)],
-                input=json.dumps(test_payload).encode("utf-8"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(agent_dir),
-                env=env_vars,
-                timeout=30
-            )
-            
-            if process.returncode == 0:
-                output = process.stdout.decode("utf-8", errors="ignore").strip()
-                try:
-                    response_data = json.loads(output)
-                    response_text = response_data.get("text", str(response_data))
-                except json.JSONDecodeError:
-                    response_text = output
-                
-                feedback_lines.append("✅ Agent test successful")
-                feedback_lines.append(f"📄 Agent response: {response_text}")
-                feedback_lines.append("\n🎉 **Adminotaur Agent Setup Complete!**")
-                feedback_lines.append("✅ Decyphertek AI is ready")
-            else:
-                feedback_lines.append("❌ Agent test failed")
-                feedback_lines.append(f"📄 Error: {process.stderr.decode('utf-8', errors='ignore')}")
-            
-            return "\n".join(feedback_lines)
-            
-        except Exception as e:
-            feedback_lines.append(f"❌ Setup error: {e}")
-            return "\n".join(feedback_lines)
-    
-    def get_enabled_agent(self) -> Optional[Dict[str, Any]]:
-        """Get the currently enabled agent from cache."""
-        try:
-            cache_path = self.store_root / "agent" / "cache.json"
-            if not cache_path.exists():
-                print("[ChatManager] No agent cache found")
-                return None
-                
-            cache_data = json.loads(cache_path.read_text(encoding="utf-8"))
-            
-            for agent_id, info in cache_data.items():
-                if isinstance(info, dict) and info.get("installed") and info.get("enabled"):
-                    print(f"[ChatManager] Found enabled agent: {agent_id}")
-                    return {"id": agent_id, **info}
-                    
-            print("[ChatManager] No enabled agent found")
-            return None
-        except Exception as e:
-            print(f"[ChatManager] Error reading agent cache: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    def get_agent_environment(self, agent_id: str) -> Dict[str, str]:
-        """Get the proper environment setup for an agent."""
-        agent_dir = self.store_root / "agent" / agent_id
-        
-        # Determine Python executable
-        if os.name == "nt":  # Windows
-            venv_python = agent_dir / ".venv" / "Scripts" / "python.exe"
-        else:  # Linux/macOS
-            venv_python = agent_dir / ".venv" / "bin" / "python"
-        
-        # Fallback to system Python if venv doesn't exist
-        if not venv_python.exists():
-            venv_python = Path(sys.executable)
-            print(f"[ChatManager] Using system Python: {venv_python}")
+
+def _main_cli(argv: List[str]) -> int:
+    try:
+        if len(argv) >= 2 and argv[1] == "status":
+            # Lightweight status check
+            print("OK:200;")
+            return 0
+        elif len(argv) >= 2 and argv[1] == "debug":
+            cm = ChatManager()
+            print(cm.debug_info())
+            return 0
         else:
-            print(f"[ChatManager] Using venv Python: {venv_python}")
-        
+            print("Usage: python -m src.agent.chat_manager [status|debug]")
+            return 2
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return 1
         return {
             "python_exec": str(venv_python),
             "agent_dir": str(agent_dir),
