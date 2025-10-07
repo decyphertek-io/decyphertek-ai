@@ -374,41 +374,31 @@ class ChatView:
             self._add_message("system", f"❌ Upload failed: {str(e)}")
     
     async def _upload_document_async(self, file):
-        """Upload document using chat_manager.py"""
+        """Upload document using store_manager"""
         try:
             # Read file content
             with open(file.path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
             
-            print(f"[Chat] Uploading {file.name} ({len(content)} chars) via chat_manager")
+            print(f"[Chat] Uploading {file.name} ({len(content)} chars) via store_manager")
             
-            # Use DocumentManager directly for proper RAG integration
-            if hasattr(self, 'doc_manager') and self.doc_manager:
-                try:
-                    # Add document to DocumentManager (this will store in the right place)
-                    success = await self.doc_manager.add_document(content, file.name, source="chat_upload")
-                    
-                    if success:
-                        self._add_message("system", f"✅ Document '{file.name}' uploaded to RAG storage successfully!")
-                        print(f"[Chat] Document {file.name} uploaded to RAG successfully")
-                        
-                        # Notify RAG view to refresh
-                        if self.on_document_uploaded:
-                            self.on_document_uploaded()
-                    else:
-                        self._add_message("system", f"⚠️ Document '{file.name}' already exists in RAG storage")
-                        print(f"[Chat] Document {file.name} already exists in RAG")
-                        
-                        # Still refresh the view to show existing documents
-                        if self.on_document_uploaded:
-                            self.on_document_uploaded()
-                            
-                except Exception as e:
-                    self._add_message("system", f"❌ Upload failed: {str(e)}")
-                    print(f"[Chat] Upload error: {e}")
+            # Use StoreManager for document uploads
+            from agent.store_manager import StoreManager
+            store_manager = StoreManager()
+            
+            result = store_manager.upload_document(file.name, content)
+            
+            if result.get("success"):
+                self._add_message("system", f"✅ {result.get('message', 'Document uploaded successfully')}")
+                print(f"[Chat] Document {file.name} uploaded successfully")
+                
+                # Notify RAG view to refresh
+                if self.on_document_uploaded:
+                    self.on_document_uploaded()
             else:
-                self._add_message("system", f"⚠️ Document manager not available - cannot upload document")
-                print("[Chat] Document manager not available")
+                error_msg = result.get('message', result.get('error', 'Upload failed'))
+                self._add_message("system", f"❌ {error_msg}")
+                print(f"[Chat] Upload failed: {error_msg}")
                 
         except Exception as e:
             print(f"[Chat] Upload error: {e}")

@@ -406,18 +406,18 @@ class RAGView:
                 
                 print(f"[RAG] File content length: {len(content)} chars")
                 
-                # Add to document manager (generates embeddings via API)
-                success = await self.doc_manager.add_document(
-                    content=content,
-                    filename=file.name,
-                    source="upload"
-                )
+                # Upload via StoreManager
+                from agent.store_manager import StoreManager
+                store_manager = StoreManager()
                 
-                if success:
+                result = store_manager.upload_document(file.name, content)
+                
+                if result.get("success"):
                     self._show_snackbar(f"✓ Added: {file.name}", ft.colors.GREEN)
                     self._refresh_docs_list()
                 else:
-                    self._show_snackbar(f"Document already exists: {file.name}", ft.colors.ORANGE)
+                    error_msg = result.get('message', result.get('error', 'Upload failed'))
+                    self._show_snackbar(f"Upload error: {error_msg}", ft.colors.ORANGE)
                     
             except Exception as ex:
                 self._show_snackbar(f"Error: {str(ex)}", ft.colors.RED)
