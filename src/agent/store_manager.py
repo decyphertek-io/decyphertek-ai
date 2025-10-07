@@ -200,20 +200,10 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
-
-            # Run build.sh to set up the environment
-            build_script = dest_dir / "build.sh"
-            if build_script.exists():
-                print(f"[StoreManager] Running build.sh for '{agent_id}'...")
-                import os
-                exit_code = os.system(f"cd {dest_dir} && bash build.sh")
-                
-                if exit_code == 0:
-                    print(f"[StoreManager] ✅ Environment setup complete for '{agent_id}'")
-                else:
-                    print(f"[StoreManager] ⚠️ build.sh exited with code {exit_code}")
-            else:
-                print(f"[StoreManager] Warning: No build.sh found for '{agent_id}', skipping environment setup")
+            
+            # Run build.sh
+            import os
+            os.system(f"cd {dest_dir} && bash build.sh")
 
             # Enable by default if requested
             enable_by_default = info.get("enable_by_default", False)
@@ -260,20 +250,10 @@ class StoreManager:
                 raise RuntimeError(listing.get("message"))
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
-
-            # Run build.sh to set up the environment
-            build_script = dest_dir / "build.sh"
-            if build_script.exists():
-                print(f"[StoreManager] Running build.sh for '{server_id}'...")
-                import os
-                exit_code = os.system(f"cd {dest_dir} && bash build.sh")
-                
-                if exit_code == 0:
-                    print(f"[StoreManager] ✅ Environment setup complete for '{server_id}'")
-                else:
-                    print(f"[StoreManager] ⚠️ build.sh exited with code {exit_code}")
-            else:
-                print(f"[StoreManager] Warning: No build.sh found for '{server_id}', skipping environment setup")
+            
+            # Run build.sh
+            import os
+            os.system(f"cd {dest_dir} && bash build.sh")
 
             # Enable by default if specified
             enable_by_default = info.get("enable_by_default", False)
