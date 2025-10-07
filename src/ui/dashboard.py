@@ -296,6 +296,12 @@ class DashboardView:
         
         # Build chat view
         if not self.chat_view:
+            # Initialize AI client first
+            if not self._ai_init_started:
+                self._init_ai_client()
+            
+            # Do not initialize chat manager here; chat.py lazily owns it
+            
             # Initialize Adminotaur agent for RAG integration
             self._init_adminotaur_agent()
             

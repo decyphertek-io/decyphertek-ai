@@ -39,6 +39,14 @@ class ChatView:
         self.agent = agent
         self.on_document_uploaded = on_document_uploaded
         self.chat_manager = chat_manager
+        # Lazily initialize chat manager here (UI owns messaging orchestration)
+        if self.chat_manager is None:
+            try:
+                from agent.chat_manager import ChatManager as _ChatManager
+                self.chat_manager = _ChatManager(page=self.page, ai_client=self.client)
+                print("[Chat] Chat manager lazily initialized in chat.py")
+            except Exception as e:
+                print(f"[Chat] Warning: could not initialize chat manager: {e}")
         
         # Initialize session manager
         self.session_manager = ChatSessionManager(storage_dir or "/tmp")
@@ -443,59 +451,12 @@ class ChatView:
             self.page.update()
         
         try:
-            # Check if agent is enabled, otherwise use direct API
-            from pathlib import Path
-            agent_cache = Path.home() / ".decyphertek-ai" / "store" / "agent" / "cache.json"
-            
-            agent_enabled = False
-            if agent_cache.exists():
-                import json
-                cache_data = json.loads(agent_cache.read_text())
-                for agent_id, info in cache_data.items():
-                    if info.get("installed") and info.get("enabled"):
-                        agent_enabled = True
-                        break
-            
-            if agent_enabled:
-                # Call agent directly
-                print(f"[Chat] Agent enabled, routing to agent")
-                agent_dir = Path.home() / ".decyphertek-ai" / "store" / "agent" / "adminotaur"
-                venv_python = agent_dir / ".venv" / "bin" / "python"
-                agent_script = agent_dir / "adminotaur.py"
-                
-                if venv_python.exists() and agent_script.exists():
-                    import subprocess
-                    import json
-                    
-                    payload = {
-                        "message": user_message,
-                        "context": "",
-                        "history": self.messages
-                    }
-                    
-                    process = subprocess.run(
-                        [str(venv_python), str(agent_script)],
-                        input=json.dumps(payload).encode("utf-8"),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        cwd=str(agent_dir),
-                        timeout=120
-                    )
-                    
-                    if process.returncode == 0:
-                        output = process.stdout.decode("utf-8").strip()
-                        try:
-                            response_data = json.loads(output)
-                            response = response_data.get("text", response_data.get("response", str(response_data)))
-                        except:
-                            response = output
-                    else:
-                        response = f"⚠️ Agent error: {process.stderr.decode('utf-8')}"
-                else:
-                    response = "⚠️ Agent not properly installed"
+            # Use chat manager for all message processing
+            if self.chat_manager:
+                response = await self.chat_manager.process_message(user_message, self.messages)
             else:
-                # No agent - use direct API
-                print(f"[Chat] No agent enabled, using direct API")
+                # Fallback to direct API if no chat manager
+                print(f"[Chat] No chat manager, using direct API")
                 response = await self.client.send_message(self.messages)
             
             print(f"[Chat] Got response: {response[:100] if response else 'None'}...")

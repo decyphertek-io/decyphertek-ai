@@ -441,11 +441,65 @@ class StoreManager:
             raise RuntimeError("No agent id provided and no default configured")
 
         info = self._agent_info(agent_id)
-        # Module path under ./store/agent/<module_path>
+        
+        # Check for compiled binary first
+        agent_dir = self.local_store_root / agent_id
+        agent_binary = agent_dir / f"{agent_id}.agent"
+        
+        if agent_binary.exists():
+            # Return a wrapper class that can execute the binary
+            class BinaryAgentWrapper:
+                def __init__(self, main_class=None, ai_client=None, provider=None, doc_manager=None):
+                    self.main_class = main_class
+                    self.ai_client = ai_client
+                    self.provider = provider
+                    self.doc_manager = doc_manager
+                    self.binary_path = agent_binary
+                    self.agent_id = agent_id
+                
+                async def chat(self, message: str, context: str = None) -> str:
+                    """Execute the agent binary with the message"""
+                    try:
+                        payload = {
+                            "message": message,
+                            "context": context or "",
+                            "history": []
+                        }
+                        
+                        process = subprocess.run(
+                            [str(self.binary_path)],
+                            input=json.dumps(payload).encode("utf-8"),
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            cwd=str(agent_dir),
+                            timeout=120
+                        )
+                        
+                        if process.returncode == 0:
+                            output = process.stdout.decode("utf-8", errors="ignore").strip()
+                            try:
+                                response_data = json.loads(output)
+                                if isinstance(response_data, dict):
+                                    return response_data.get("text", response_data.get("response", str(response_data)))
+                                return str(response_data)
+                            except json.JSONDecodeError:
+                                return output
+                        else:
+                            error = process.stderr.decode("utf-8", errors="ignore")
+                            return f"⚠️ Agent error: {error[:200]}"
+                            
+                    except subprocess.TimeoutExpired:
+                        return "⚠️ Agent timed out (2 minutes)"
+                    except Exception as e:
+                        return f"⚠️ Agent error: {e}"
+            
+            return BinaryAgentWrapper
+        
+        # Fallback to Python script loading (legacy support)
         module_rel = info.get("module_path") or f"{agent_id}/{agent_id}.py"
         mod_path = self.local_store_root / module_rel
         if not mod_path.exists():
-            raise FileNotFoundError(f"Agent module not found at {mod_path}")
+            raise FileNotFoundError(f"Agent binary not found at {agent_binary} and module not found at {mod_path}")
 
         spec = importlib.util.spec_from_file_location(agent_id, str(mod_path))
         module = importlib.util.module_from_spec(spec)
