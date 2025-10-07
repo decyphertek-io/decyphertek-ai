@@ -100,6 +100,18 @@ class ChatManager:
                 "history": message_history
             }
             
+            # Prepare env (propagate API key if available)
+            env_vars = None
+            try:
+                import os as _os
+                env_vars = _os.environ.copy()
+                if self.ai_client is not None:
+                    api_key = getattr(self.ai_client, "api_key", None)
+                    if api_key:
+                        env_vars["OPENROUTER_API_KEY"] = api_key
+            except Exception:
+                env_vars = None
+
             # Execute agent
             if use_binary:
                 print(f"[ChatManager] Calling {agent_id} binary at {agent_binary}")
@@ -114,6 +126,7 @@ class ChatManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=str(agent_dir),
+                env=env_vars,
                 timeout=120
             )
             
