@@ -367,12 +367,10 @@ class ChatManager:
                 server_name = server_dir.name
                 binary_name = f"{server_name}.mcp" if server_name != "web-search" else "web.mcp"
                 binary_path = server_dir / binary_name
-                script_path = server_dir / f"{server_name}.py"
                 
                 mcp_servers.append({
                     "name": server_name,
                     "binary_exists": binary_path.exists(),
-                    "script_exists": script_path.exists(),
                     "binary_executable": binary_path.exists() and binary_path.stat().st_mode & 0o111 != 0
                 })
         
@@ -381,7 +379,6 @@ class ChatManager:
             for server in mcp_servers:
                 result += f"  - {server['name']}\n"
                 result += f"    Binary: {'✅' if server['binary_exists'] else '❌'} (executable: {'✅' if server['binary_executable'] else '❌'})\n"
-                result += f"    Script: {'✅' if server['script_exists'] else '❌'}\n"
         else:
             result += "No MCP servers found\n"
         
