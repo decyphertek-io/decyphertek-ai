@@ -201,24 +201,15 @@ class StoreManager:
             self._download_contents_recursive(repo_url, folder_path, dest_dir)
             print(f"[StoreManager] ✅ Download complete")
             
-            # Run build.sh using shell=True (same as manual execution)
-            import subprocess
-            result = subprocess.run(
-                f"cd '{dest_dir}' && bash build.sh",
-                shell=True,
-                executable="/bin/bash"
-            )
-            
-            # Check if .venv was actually created
-            venv_path = dest_dir / ".venv"
-            if venv_path.exists():
-                print(f"[StoreManager] ✅ .venv created at {venv_path}")
-            else:
-                print(f"[StoreManager] ❌ ERROR: .venv NOT found at {venv_path}")
-                print(f"[StoreManager] build.sh exit code was: {result.returncode}")
-            
-            if result.returncode != 0:
-                print(f"[StoreManager] ⚠️ build.sh failed with exit code {result.returncode}")
+            # Ensure compiled binary is executable if present (e.g., adminotaur.agent)
+            try:
+                for candidate in [dest_dir / f"{agent_id}.agent", dest_dir / agent_id / f"{agent_id}.agent"]:
+                    if candidate.exists():
+                        os.chmod(candidate, (candidate.stat().st_mode | 0o111))
+                        print(f"[StoreManager] ✅ Marked executable: {candidate}")
+                        break
+            except Exception as e:
+                print(f"[StoreManager] Warning: could not set executable bit: {e}")
 
             # Enable by default if requested
             enable_by_default = info.get("enable_by_default", False)

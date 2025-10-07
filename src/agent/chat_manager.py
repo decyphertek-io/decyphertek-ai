@@ -77,15 +77,14 @@ class ChatManager:
         try:
             agent_id = agent_info["id"]
             agent_dir = self.store_root / "agent" / agent_id
+            agent_binary = agent_dir / f"{agent_id}.agent"
             venv_python = agent_dir / ".venv" / "bin" / "python"
             agent_script = agent_dir / f"{agent_id}.py"
             
-            # Validate paths
-            if not venv_python.exists():
-                return f"⚠️ Agent environment not found. Please reinstall {agent_id} from the Agents tab."
-            
-            if not agent_script.exists():
-                return f"⚠️ Agent script not found. Please reinstall {agent_id} from the Agents tab."
+            # Prefer compiled binary if present; fallback to venv + script
+            use_binary = agent_binary.exists()
+            if not use_binary and (not venv_python.exists() or not agent_script.exists()):
+                return f"⚠️ Agent not ready. Please reinstall {agent_id} from the Agents tab."
             
             # Prepare input
             payload = {
@@ -95,9 +94,15 @@ class ChatManager:
             }
             
             # Execute agent
-            print(f"[ChatManager] Calling {agent_id} at {agent_script}")
+            if use_binary:
+                print(f"[ChatManager] Calling {agent_id} binary at {agent_binary}")
+                cmd = [str(agent_binary)]
+            else:
+                print(f"[ChatManager] Calling {agent_id} script via venv at {agent_script}")
+                cmd = [str(venv_python), str(agent_script)]
+
             process = subprocess.run(
-                [str(venv_python), str(agent_script)],
+                cmd,
                 input=json.dumps(payload).encode("utf-8"),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
