@@ -439,6 +439,7 @@ class ChatManager:
                 result += f"  - {app_subdir.name}\n"
         
         return result
+    
 
 
 if __name__ == "__main__":
