@@ -31,3 +31,9 @@ sudo systemctl status agent
 sudo systemctl status app
 healthcheck-agent
 ```
+
+References:
+-----------
+```
+https://decyphertek.readthedocs.io/en/latest/technotes/Decyphertek-ai/
+```
