@@ -1,7 +1,6 @@
 
 """
-DecypherTek AI - Mobile App
-Main entry point for the Flet application
+DecypherTek AI 
 """
 
 import flet as ft

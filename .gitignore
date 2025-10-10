@@ -1,5 +1,9 @@
 # builds
 .github/
+.venv/
+src/
+launch.sh 
+poetry.lock
 
 # Python
 __pycache__/
