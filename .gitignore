@@ -2,8 +2,6 @@
 .github/
 .venv/
 .gitignore
-src/
-launch.sh 
 poetry.lock
 
 # Python
@@ -14,7 +12,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+#dist/
 downloads/
 eggs/
 .eggs/
