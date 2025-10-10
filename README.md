@@ -37,6 +37,14 @@ healthcheck-agent
 Then ask a question, AI will research and store it in a note. 
 ```
 
+Screenshots:
+-----------
+![Research Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/research.png)
+<img src="https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/research.png" alt="Research Logo" width="300">
+
+![Web Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/web.png)
+<img src="https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/web.png" alt="Web Logo" width="300">
+
 References:
 -----------
 ```
