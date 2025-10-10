@@ -12,7 +12,14 @@ Linux based decyphertek.ai chat. Modular stores: mcp ; agent ; app , to customiz
 
 ## Quick Start
 ```
+# Install the Decyphertek.ai app. 
 curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/install.sh | sudo bash
+
+# Reverse Engineer the app.
+curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/engineer.sh | sudo bash
+
+# Uninstall the app.
+curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/uninstall.sh | sudo bash
 
 * Setup > Create creds > add settings > AI Admin Chat . 
 
