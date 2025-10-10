@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Decyphertek AI Installer with systemd support
-# This script downloads, installs, and sets up decyphertek.ai as a systemd service
+# Decyphertek AI Installer
+# This script downloads, installs, and creates a desktop launcher for decyphertek.ai
 
 set -e  # Exit on error
 
@@ -15,10 +15,9 @@ NC='\033[0m' # No Color
 # Configuration
 INSTALL_DIR="/opt"
 APP_NAME="decyphertek.ai"
-SERVICE_NAME="decyphertek.ai"
 GITHUB_REPO="decyphertek-io/decyphertek-ai"
 DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${APP_NAME}"
-SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_NAME}.service"
+DESKTOP_FILE="/usr/share/applications/decyphertek-ai.desktop"
 
 # Print colored messages
 print_info() {
@@ -57,13 +56,6 @@ check_dependencies() {
         exit 1
     fi
     
-    if ! command -v systemctl &> /dev/null; then
-        print_warning "systemd not found. Service management will not be available."
-        SYSTEMD_AVAILABLE=false
-    else
-        SYSTEMD_AVAILABLE=true
-    fi
-    
     print_success "Dependencies check passed"
 }
 
@@ -87,47 +79,38 @@ set_permissions() {
     print_success "Permissions set"
 }
 
-# Create systemd service file
-create_systemd_service() {
-    if [ "$SYSTEMD_AVAILABLE" = false ]; then
-        print_warning "Skipping systemd service creation (systemd not available)"
-        return
-    fi
+# Create desktop launcher
+create_desktop_launcher() {
+    print_info "Creating desktop launcher..."
     
-    print_info "Creating systemd service file..."
-    
-    cat > "${SYSTEMD_SERVICE}" <<EOF
-[Unit]
-Description=Decyphertek AI Application
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/${APP_NAME}
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
+    cat > "${DESKTOP_FILE}" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Decyphertek AI
+Comment=Decyphertek AI Application
+Exec=${INSTALL_DIR}/${APP_NAME}
+Icon=applications-science
+Terminal=false
+Categories=Utility;Application;
+Keywords=decyphertek;ai;
+StartupNotify=true
 EOF
     
-    print_success "Systemd service file created at ${SYSTEMD_SERVICE}"
+    chmod +x "${DESKTOP_FILE}"
+    print_success "Desktop launcher created at ${DESKTOP_FILE}"
 }
 
-# Reload systemd daemon
-setup_systemd_service() {
-    if [ "$SYSTEMD_AVAILABLE" = false ]; then
-        return
+# Update desktop database
+update_desktop_database() {
+    print_info "Updating desktop database..."
+    
+    if command -v update-desktop-database &> /dev/null; then
+        update-desktop-database /usr/share/applications/ 2>/dev/null || true
+        print_success "Desktop database updated"
+    else
+        print_warning "update-desktop-database not found, skipping database update"
     fi
-    
-    print_info "Reloading systemd daemon..."
-    systemctl daemon-reload
-    
-    print_success "Systemd service configured (not enabled by default)"
 }
 
 # Display completion message
@@ -135,24 +118,16 @@ display_completion() {
     echo ""
     print_success "Installation completed successfully!"
     echo ""
-    
-    echo -e "${GREEN}Run the application:${NC}"
-    echo -e "  ${BLUE}${INSTALL_DIR}/${APP_NAME}${NC}  - Run directly"
+    echo -e "${GREEN}The application has been installed to:${NC}"
+    echo -e "  ${BLUE}${INSTALL_DIR}/${APP_NAME}${NC}"
     echo ""
-    
-    if [ "$SYSTEMD_AVAILABLE" = true ]; then
-        echo -e "${GREEN}Or manage as a service (optional):${NC}"
-        echo -e "  ${BLUE}sudo systemctl start ${SERVICE_NAME}.service${NC}    - Start the service"
-        echo -e "  ${BLUE}sudo systemctl stop ${SERVICE_NAME}.service${NC}     - Stop the service"
-        echo -e "  ${BLUE}sudo systemctl restart ${SERVICE_NAME}.service${NC}  - Restart the service"
-        echo -e "  ${BLUE}sudo systemctl status ${SERVICE_NAME}.service${NC}   - Check service status"
-        echo -e "  ${BLUE}sudo systemctl enable ${SERVICE_NAME}.service${NC}   - Enable on boot (if desired)"
-        echo -e "  ${BLUE}sudo systemctl disable ${SERVICE_NAME}.service${NC}  - Disable on boot"
-        echo ""
-        echo -e "${GREEN}View logs:${NC}"
-        echo -e "  ${BLUE}sudo journalctl -u ${SERVICE_NAME}.service -f${NC}  - Follow logs in real-time"
-        echo -e "  ${BLUE}sudo journalctl -u ${SERVICE_NAME}.service${NC}     - View all logs"
-    fi
+    echo -e "${GREEN}A desktop launcher has been created!${NC}"
+    echo -e "  ${BLUE}Look for 'Decyphertek AI' in your application menu${NC}"
+    echo ""
+    echo -e "${GREEN}You can also:${NC}"
+    echo -e "  ${BLUE}1.${NC} Find it in your XFCE application menu"
+    echo -e "  ${BLUE}2.${NC} Right-click on desktop > Create Launcher > Browse to find 'Decyphertek AI'"
+    echo -e "  ${BLUE}3.${NC} Run directly from terminal: ${BLUE}${INSTALL_DIR}/${APP_NAME}${NC}"
     echo ""
 }
 
@@ -168,8 +143,8 @@ main() {
     check_dependencies
     download_app
     set_permissions
-    create_systemd_service
-    setup_systemd_service
+    create_desktop_launcher
+    update_desktop_database
     display_completion
 }
 
