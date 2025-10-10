@@ -70,7 +70,8 @@ class ChatView:
         self.use_rag = True  # RAG enabled by default
         self.editor_open = False  # Track editor state
         self.show_thinking = True  # Show thinking by default
-        self.web_search_enabled = False  # New toggle: disable by default
+        self.web_search_enabled = False  # Web search toggle: disable by default
+        self.research_mode_enabled = False  # Research mode toggle: disable by default
         
         # Sidebar state
         self.sidebar_visible = False
@@ -216,12 +217,12 @@ class ChatView:
                                             ft.Icon(
                                                 ft.icons.PSYCHOLOGY,
                                                 size=16,
-                                                color=ft.colors.BLUE_600 if self.show_thinking else ft.colors.GREY_400
+                                                color=ft.colors.WHITE if self.show_thinking else ft.colors.GREY_400
                                             ),
                                             ft.Text(
-                                                "Show thinking",
+                                                "Thinking",
                                                 size=12,
-                                                color=ft.colors.BLUE_600 if self.show_thinking else ft.colors.GREY_400
+                                                color=ft.colors.WHITE if self.show_thinking else ft.colors.GREY_400
                                             ),
                                             ft.Switch(
                                                 value=self.show_thinking,
@@ -241,7 +242,7 @@ class ChatView:
                                                 color=ft.colors.GREEN_600 if self.web_search_enabled else ft.colors.GREY_400
                                             ),
                                             ft.Text(
-                                                "Web Search",
+                                                "Web",
                                                 size=12,
                                                 color=ft.colors.GREEN_600 if self.web_search_enabled else ft.colors.GREY_400
                                             ),
@@ -249,6 +250,28 @@ class ChatView:
                                                 value=self.web_search_enabled,
                                                 on_change=self._toggle_web_search,
                                                 active_color=ft.colors.GREEN_400,
+                                            )
+                                        ],
+                                        spacing=8,
+                                        alignment=ft.MainAxisAlignment.START
+                                    ),
+                                    # Research Mode toggle
+                                    ft.Row(
+                                        controls=[
+                                            ft.Icon(
+                                                ft.icons.SCIENCE,
+                                                size=16,
+                                                color=ft.colors.BLUE_600 if self.research_mode_enabled else ft.colors.GREY_400
+                                            ),
+                                            ft.Text(
+                                                "Research",
+                                                size=12,
+                                                color=ft.colors.BLUE_600 if self.research_mode_enabled else ft.colors.GREY_400
+                                            ),
+                                            ft.Switch(
+                                                value=self.research_mode_enabled,
+                                                on_change=self._toggle_research_mode,
+                                                active_color=ft.colors.BLUE_400,
                                             )
                                         ],
                                         spacing=8,
@@ -458,8 +481,14 @@ class ChatView:
         
         print(f"[Chat] Sending message: {user_message[:50]}...")
         
-        # Add user message to chat
-        self._add_message("user", user_message)
+        # Check if this is a one-shot @research command
+        is_oneshot_research = user_message.startswith("@research")
+        
+        # Add user message to chat (with blue highlighting for @research)
+        if is_oneshot_research:
+            self._add_message_with_research_highlight("user", user_message)
+        else:
+            self._add_message("user", user_message)
         
         # Add messages to history
         self.messages.append({"role": "user", "content": user_message})
@@ -474,11 +503,19 @@ class ChatView:
             self.page.update()
         
         try:
+            # Determine if research mode should be active for this message
+            # Two ways: toggle ON (persistent) or @research prefix (one-shot)
+            research_active = self.research_mode_enabled or is_oneshot_research
+            
             # Use chat manager for all message processing
             if self.chat_manager:
-                # Attach web search preference to history context
-                # so ChatManager can pass it to the agent
-                context_note = {"meta": {"web_search_enabled": self.web_search_enabled}}
+                # Attach preferences to history context so ChatManager can pass to agent
+                context_note = {
+                    "meta": {
+                        "web_search_enabled": self.web_search_enabled,
+                        "research_mode_enabled": research_active
+                    }
+                }
                 history_with_pref = self.messages + [{"role": "system", "content": json.dumps(context_note)}]
                 response = await self.chat_manager.process_message(user_message, history_with_pref)
             else:
@@ -537,6 +574,103 @@ class ChatView:
             self.session_manager.add_message(role, content)
         
         self.page.update()
+    
+    def _add_message_with_research_highlight(self, role: str, content: str, save_to_session: bool = True):
+        """Add message with @research highlighted in blue"""
+        bubble = self._create_research_bubble(role, content)
+        self.chat_list.controls.append(bubble)
+        
+        # Save to session manager only if requested
+        if save_to_session:
+            self.session_manager.add_message(role, content)
+        
+        self.page.update()
+    
+    def _create_research_bubble(self, role: str, content: str) -> ft.Container:
+        """Create a message bubble with @research highlighted in blue"""
+        import re
+        
+        # Define colors based on role
+        is_user = role == "user"
+        bg_color = ft.colors.GREY_700 if is_user else ft.colors.WHITE
+        text_color = ft.colors.WHITE if is_user else ft.colors.BLACK
+        
+        # Parse content to highlight @research
+        bubble_controls = []
+        
+        if content.startswith("@research"):
+            # Split into @research and the rest
+            parts = content.split(None, 1)  # Split on first whitespace
+            if len(parts) > 1:
+                research_tag = parts[0]  # "@research"
+                rest_content = parts[1]  # Everything after @research
+                
+                # Create row with blue highlighted @research
+                bubble_controls.append(
+                    ft.Row(
+                        controls=[
+                            ft.Container(
+                                content=ft.Text(
+                                    research_tag,
+                                    size=14,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.colors.WHITE,
+                                    selectable=True,
+                                ),
+                                bgcolor=ft.colors.BLUE_600,
+                                padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                                border_radius=4,
+                            ),
+                            ft.Text(
+                                rest_content,
+                                size=14,
+                                color=text_color,
+                                selectable=True,
+                            ),
+                        ],
+                        spacing=8,
+                        wrap=True,
+                    )
+                )
+            else:
+                # Just @research with nothing after
+                bubble_controls.append(
+                    ft.Container(
+                        content=ft.Text(
+                            content,
+                            size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.colors.WHITE,
+                            selectable=True,
+                        ),
+                        bgcolor=ft.colors.BLUE_600,
+                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                        border_radius=4,
+                    )
+                )
+        else:
+            # No @research, just regular text
+            bubble_controls.append(
+                ft.Text(
+                    content,
+                    size=14,
+                    selectable=True,
+                    color=text_color,
+                )
+            )
+        
+        # Return bubble with dynamic styling
+        return ft.Container(
+            content=ft.Column(
+                controls=bubble_controls,
+                spacing=5,
+            ),
+            bgcolor=bg_color,
+            border_radius=12,
+            padding=12,
+            margin=ft.margin.only(bottom=8),
+            alignment=ft.alignment.center_left,
+        )
     
     def _create_message_bubble(self, role: str, content: str) -> ft.Container:
         """Create a message bubble with embedded YouTube videos"""
@@ -687,11 +821,26 @@ class ChatView:
     def _toggle_web_search(self, e):
         """Toggle Web Search on/off"""
         self.web_search_enabled = not self.web_search_enabled
-        ft.SnackBar(
+        snackbar = ft.SnackBar(
             content=ft.Text(f"Web Search {'enabled' if self.web_search_enabled else 'disabled'}"),
             bgcolor=ft.colors.GREEN if self.web_search_enabled else ft.colors.GREY
-        ).open = True
+        )
+        self.page.overlay.append(snackbar)
+        snackbar.open = True
+        self.page.update()
         print(f"[Chat] Web Search {'enabled' if self.web_search_enabled else 'disabled'}")
+    
+    def _toggle_research_mode(self, e):
+        """Toggle Research Mode on/off"""
+        self.research_mode_enabled = not self.research_mode_enabled
+        snackbar = ft.SnackBar(
+            content=ft.Text(f"Research Mode {'enabled' if self.research_mode_enabled else 'disabled'}"),
+            bgcolor=ft.colors.BLUE if self.research_mode_enabled else ft.colors.GREY
+        )
+        self.page.overlay.append(snackbar)
+        snackbar.open = True
+        self.page.update()
+        print(f"[Chat] Research Mode {'enabled' if self.research_mode_enabled else 'disabled'}")
 
     def _show_quick_settings(self, e):
         """Show quick model settings dialog"""
@@ -1262,4 +1411,3 @@ class ChatView:
         
         self.page.add(dialog)
         self.page.update()
-
