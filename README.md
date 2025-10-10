@@ -30,6 +30,11 @@ sudo systemctl status mcp
 sudo systemctl status agent
 sudo systemctl status app
 healthcheck-agent
+
+# Experimental commands:
+# Make sure the research toggle is enabled.
+@research
+Then ask a question, AI will research and store it in a note. 
 ```
 
 References:
