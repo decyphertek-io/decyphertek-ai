@@ -14,6 +14,8 @@ A modern AI assistant with chat, document management, and app integration capabi
 ```
 curl -fsSL https://github.com/decyphertek-io/decyphertek-ai/install.sh | sudo bash
 * Create creds > add settings > AI Admin Chat . 
+# Decyphertek AI working directory:
+cd ~/.decyphertek-ai/
 
 # After installation, manage the service with:
 sudo systemctl start decyphertek.ai
@@ -26,7 +28,6 @@ sudo systemctl disable decyphertek.ai
 # View logs:
 sudo journalctl -u decyphertek.ai
 sudo journalctl -u decyphertek.ai 
-
 ```
 
 ## Basic Usage
