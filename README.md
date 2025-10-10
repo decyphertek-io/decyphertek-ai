@@ -19,17 +19,8 @@ curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/
 # Decyphertek AI working directory:
 cd ~/.decyphertek-ai/
 
-# After installation, manage the service with:
-sudo systemctl start decyphertek.ai
-sudo systemctl stop decyphertek.ai
-sudo systemctl restart decyphertek.ai
-sudo systemctl status decyphertek.ai
-sudo systemctl enable decyphertek.ai
-sudo systemctl disable decyphertek.ai
-
-# View logs:
-sudo journalctl -u decyphertek.ai
-sudo journalctl -u decyphertek.ai 
+# Optional: Application desktop icon works with xfce. May need to edit.
+vim /usr/share/applications/decyphertek-ai.desktop
 
 # Debugging:
 /opt/decyphertak.ai 
