@@ -11,23 +11,23 @@ A modern AI assistant with chat, document management, and app integration capabi
 - **MCP Servers** - Modular Python servers for web search, file management, and more
 
 ## Quick Start
+```
+curl -fsSL https://github.com/decyphertek-io/decyphertek-ai/install.sh | sudo bash
+* Create creds > add settings > AI Admin Chat . 
 
-1. **Install Dependencies**
-```bash
-   # Using Poetry (recommended)
-   bash -c "$(curl -sSL https://install.python-poetry.org)"
-poetry install
-   ```
+# After installation, manage the service with:
+sudo systemctl start decyphertek.ai
+sudo systemctl stop decyphertek.ai
+sudo systemctl restart decyphertek.ai
+sudo systemctl status decyphertek.ai
+sudo systemctl enable decyphertek.ai
+sudo systemctl disable decyphertek.ai
 
-2. **Launch the App**
-   ```bash
-   bash launch.sh
-   ```
+# View logs:
+sudo journalctl -u decyphertek.ai
+sudo journalctl -u decyphertek.ai 
 
-3. **First Time Setup**
-   - Create your account credentials
-   - Add your OpenRouter API key in Settings
-   - Start chatting!
+```
 
 ## Basic Usage
 
