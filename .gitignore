@@ -1,6 +1,7 @@
 # builds
 .github/
 .venv/
+.gitignore
 src/
 launch.sh 
 poetry.lock
