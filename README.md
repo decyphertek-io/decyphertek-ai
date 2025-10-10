@@ -7,7 +7,7 @@ Linux based decyphertek.ai chat. Modular stores: mcp ; agent ; app , to customiz
 - **AI Chat** - Generalized / Specialized AI chat.
 - **Rag Chat** - Upload docs and inquire about them. 
 - **App Store** - Python apps.
- **Agent Store** - Manage the AI personality.
+- **Agent Store** - Manage the AI personality.
 - **MCP Servers** - Modular AI Skills.
 
 ## Quick Start
