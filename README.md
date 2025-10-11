@@ -52,7 +52,7 @@ Screenshots:
 * Web Mode:
 ![Web Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/web.png)
 
-![Engineer Mode:](https://github.com/decyphertek-io/configs/blob/main/Logos/engineer.png)
+![Engineer Mode:](https://github.com/decyphertek-io/configs/blob/main/Logos/reverse-engineer.png)
 
 References:
 -----------
