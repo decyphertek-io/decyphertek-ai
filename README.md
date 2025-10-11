@@ -52,6 +52,9 @@ Screenshots:
 * Web Mode:
 ![Web Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/web.png)
 
+* Architecture Diagram:
+![Engineer Mode:](https://github.com/decyphertek-io/configs/blob/main/Logos/engineer.png)
+
 References:
 -----------
 ```
