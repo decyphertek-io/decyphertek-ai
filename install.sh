@@ -59,6 +59,32 @@ check_dependencies() {
     print_success "Dependencies check passed"
 }
 
+# Ensure libmpv exists for audio playback
+install_audio_dependencies() {
+    print_info "Ensuring libmpv audio dependency is installed..."
+
+    if ! dpkg -s libmpv2 >/dev/null 2>&1; then
+        print_info "Installing libmpv2..."
+        DEBIAN_FRONTEND=noninteractive apt-get install -y libmpv2
+    else
+        print_info "libmpv2 already installed"
+    fi
+
+    local LIBMPV_SO2="/usr/lib/x86_64-linux-gnu/libmpv.so.2"
+    local LIBMPV_SO1="/usr/lib/x86_64-linux-gnu/libmpv.so.1"
+
+    if [ -f "${LIBMPV_SO2}" ]; then
+        if [ ! -e "${LIBMPV_SO1}" ]; then
+            ln -s "${LIBMPV_SO2}" "${LIBMPV_SO1}"
+            print_success "Created libmpv.so.1 symlink"
+        else
+            print_info "libmpv.so.1 already present"
+        fi
+    else
+        print_warning "${LIBMPV_SO2} not found. Please ensure libmpv2 installed correctly."
+    fi
+}
+
 # Download the application
 download_app() {
     print_info "Downloading ${APP_NAME}..."
@@ -141,6 +167,7 @@ main() {
     
     check_root
     check_dependencies
+    install_audio_dependencies
     download_app
     set_permissions
     create_desktop_launcher
