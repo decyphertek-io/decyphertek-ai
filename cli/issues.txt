@@ -58,3 +58,15 @@ System Status:
 decyphertek.ai:~$ exit
 
 [SYSTEM] Exiting Decyphertek.ai
+
+
+
+Refactor Adminotaur to use LangGraph StateGraph with supervisor pattern
+
+Define @tool functions that call MCP Gateway for skill invocation
+
+Update README.md to explain LangGraph architecture
+
+Rebuild Adminotaur agent
+
+Test with CLI /chat command

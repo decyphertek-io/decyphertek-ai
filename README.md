@@ -3,7 +3,7 @@
 * CURRENTLY IN DEV
 
 ## Tech Stack
-- **LangChain**: Agent orchestration and workflow management
+- **LangGraph**: Agent orchestration and workflow management
 - **FastMCP**: MCP server implementation for skills/tools
 - **ChromaDB**: Vector database for RAG functionality
 - **uv**: Python version and dependency management
@@ -53,7 +53,7 @@ CLI (cli-ai.py)
   ├─> mcp-store (GitHub) → Downloads MCP skills
   └─> app-store (GitHub) → Downloads apps (ChromaDB, etc.)
   ↓
-Adminotaur Agent (LangChain supervisor)
+Adminotaur Agent (LangGraph supervisor)
   ↓ Routes queries and slash commands
   ↓ Coordinates worker agents
   ↓
@@ -80,7 +80,7 @@ AI Provider (OpenRouter, etc.)
 - **[app-store](https://github.com/decyphertek-io/app-store)** - Standalone apps (ChromaDB, etc.)
 
 ### Tech Stack
-- **[LangChain](https://python.langchain.com/)** - Agent orchestration framework
+- **[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview)** - Agent orchestration framework
 - **[FastMCP](https://github.com/jlowin/fastmcp)** - MCP server implementation
 - **[ChromaDB](https://www.trychroma.com/)** - Vector database for RAG
 - **[uv](https://docs.astral.sh/uv/)** - Python package and project manager
