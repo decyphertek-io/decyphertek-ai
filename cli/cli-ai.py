@@ -237,33 +237,41 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download workers registry")
             return
         
-        # Parse workers.json to get adminotaur URLs
+        # Parse workers.json to get adminotaur config
         try:
             registry_data = json.loads(self.workers_registry_path.read_text())
             adminotaur_config = registry_data.get("agents", {}).get("adminotaur", {})
-            agent_url = adminotaur_config.get("download_url")
-            md_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/adminotaur/adminotaur.md"
+            repo_url = adminotaur_config.get("repo_url", "")
+            folder_path = adminotaur_config.get("folder_path", "")
+            files = adminotaur_config.get("files", {})
             
-            if not agent_url:
-                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} No download URL found in registry")
+            if not repo_url or not folder_path or not files:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Invalid registry format")
                 return
+            
+            # Convert GitHub URL to raw URL base
+            raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
             
             print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
             
-            # Download adminotaur.agent
-            with urllib.request.urlopen(agent_url) as response:
-                agent_data = response.read()
-                self.adminotaur_agent_path.write_bytes(agent_data)
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: adminotaur.agent")
+            # Download agent executable
+            if "agent" in files:
+                agent_url = raw_base + files["agent"]
+                with urllib.request.urlopen(agent_url) as response:
+                    agent_data = response.read()
+                    self.adminotaur_agent_path.write_bytes(agent_data)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {files['agent']}")
             
-            # Download adminotaur.md
-            try:
-                with urllib.request.urlopen(md_url) as response:
-                    md_data = response.read()
-                    self.adminotaur_md_path.write_bytes(md_data)
-                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: adminotaur.md")
-            except Exception as e:
-                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download adminotaur.md: {e}")
+            # Download docs
+            if "docs" in files:
+                docs_url = raw_base + files["docs"]
+                try:
+                    with urllib.request.urlopen(docs_url) as response:
+                        docs_data = response.read()
+                        self.adminotaur_md_path.write_bytes(docs_data)
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {files['docs']}")
+                except Exception as e:
+                    print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download {files['docs']}: {e}")
                 
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
