@@ -1,8 +1,6 @@
 # Decyphertek-AI 
 
-## Overview
 * CURRENTLY IN DEV
-* A modular Sysadmin AI CLI application .
 
 ## Tech Stack
 - **LangChain**: Agent orchestration and workflow management

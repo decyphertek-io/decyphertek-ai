@@ -114,9 +114,8 @@ class DecyphertekCLI:
                 print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Authentication failed. Exiting.\n")
                 sys.exit(1)
         
-        # Download Adminotaur agent if not present
-        if not self.adminotaur_agent_path.exists():
-            self.download_adminotaur()
+        # Download all enabled agents, skills, and apps
+        self.download_all_stores()
         
         # Check for missing credentials
         self.check_credentials()
@@ -433,6 +432,162 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download skills registry: {e}")
             return False
     
+    def download_all_stores(self):
+        """Download all enabled items from agent-store, mcp-store, and app-store"""
+        print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading enabled agents, skills, and apps...\n")
+        
+        # Download agent-store items
+        if self.download_workers_registry():
+            self.download_enabled_agents()
+        
+        # Download mcp-store items
+        if self.download_skills_registry():
+            self.download_enabled_skills()
+        
+        # Download app-store items
+        self.download_enabled_apps()
+    
+    def download_enabled_agents(self):
+        """Download all enabled agents from workers.json"""
+        try:
+            registry = json.loads(self.workers_registry_path.read_text())
+            agents = registry.get("agents", {})
+            
+            for agent_id, agent_config in agents.items():
+                if not agent_config.get("enabled", False):
+                    continue
+                
+                agent_dir = self.agent_store_dir / agent_id
+                agent_dir.mkdir(exist_ok=True)
+                
+                repo_url = agent_config.get("repo_url", "")
+                folder_path = agent_config.get("folder_path", "")
+                files = agent_config.get("files", {})
+                
+                if not repo_url or not folder_path:
+                    continue
+                
+                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                
+                # Download agent executable
+                if "agent" in files:
+                    agent_path = agent_dir / files["agent"].split("/")[-1]
+                    try:
+                        with urllib.request.urlopen(raw_base + files["agent"]) as response:
+                            agent_path.write_bytes(response.read())
+                            agent_path.chmod(0o755)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
+                    except Exception as e:
+                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {agent_id}: {e}")
+                
+                # Download docs
+                if "docs" in files:
+                    docs_path = agent_dir / files["docs"].split("/")[-1]
+                    try:
+                        with urllib.request.urlopen(raw_base + files["docs"]) as response:
+                            docs_path.write_bytes(response.read())
+                    except:
+                        pass
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading agents: {e}")
+    
+    def download_enabled_skills(self):
+        """Download all enabled MCP skills from skills.json"""
+        try:
+            registry = json.loads(self.skills_registry_path.read_text())
+            skills = registry.get("skills", {})
+            
+            for skill_id, skill_config in skills.items():
+                if not skill_config.get("enabled", False):
+                    continue
+                
+                skill_dir = self.mcp_store_dir / skill_id
+                skill_dir.mkdir(exist_ok=True)
+                
+                repo_url = skill_config.get("repo_url", "")
+                folder_path = skill_config.get("folder_path", "")
+                files = skill_config.get("files", {})
+                
+                if not repo_url or not folder_path:
+                    continue
+                
+                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                
+                # Download skill executable
+                if "executable" in files:
+                    skill_path = skill_dir / files["executable"].split("/")[-1]
+                    try:
+                        with urllib.request.urlopen(raw_base + files["executable"]) as response:
+                            skill_path.write_bytes(response.read())
+                            skill_path.chmod(0o755)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
+                    except Exception as e:
+                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {skill_id}: {e}")
+                
+                # Download config and docs
+                for file_type in ["config", "docs"]:
+                    if file_type in files:
+                        file_path = skill_dir / files[file_type].split("/")[-1]
+                        try:
+                            with urllib.request.urlopen(raw_base + files[file_type]) as response:
+                                file_path.write_bytes(response.read())
+                        except:
+                            pass
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading skills: {e}")
+    
+    def download_enabled_apps(self):
+        """Download all enabled apps from app.json"""
+        try:
+            app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
+            
+            with urllib.request.urlopen(app_registry_url) as response:
+                registry = json.loads(response.read())
+            
+            apps = registry.get("apps", {})
+            
+            for app_id, app_config in apps.items():
+                if not app_config.get("enabled", False):
+                    continue
+                
+                app_dir = self.app_store_dir / app_id
+                app_dir.mkdir(exist_ok=True)
+                
+                repo_url = app_config.get("repo_url", "")
+                folder_path = app_config.get("folder_path", "")
+                files = app_config.get("files", {})
+                
+                if not repo_url or not folder_path:
+                    continue
+                
+                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                
+                # Download app executable
+                if "executable" in files:
+                    app_path = app_dir / files["executable"].split("/")[-1]
+                    try:
+                        with urllib.request.urlopen(raw_base + files["executable"]) as response:
+                            app_path.write_bytes(response.read())
+                            app_path.chmod(0o755)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
+                    except Exception as e:
+                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
+                
+                # Download config and docs
+                for file_type in ["config", "docs"]:
+                    if file_type in files:
+                        file_path = app_dir / files[file_type].split("/")[-1]
+                        try:
+                            with urllib.request.urlopen(raw_base + files[file_type]) as response:
+                                file_path.write_bytes(response.read())
+                        except:
+                            pass
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading apps: {e}")
+    
     def download_adminotaur(self):
         """Download Adminotaur agent using workers.json registry"""
         print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading agent registry...")
@@ -465,6 +620,7 @@ class DecyphertekCLI:
                 with urllib.request.urlopen(agent_url) as response:
                     agent_data = response.read()
                     self.adminotaur_agent_path.write_bytes(agent_data)
+                    self.adminotaur_agent_path.chmod(0o755)  # Make executable
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {files['agent']}")
             
             # Download docs
