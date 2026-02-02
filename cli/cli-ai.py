@@ -77,7 +77,7 @@ class DecyphertekCLI:
 {Colors.RESET}
 {Colors.BLUE}    ▸ SYSADMIN AI ASSISTANT v{self.version}
     ▸ MODULAR AGENT/MCP ARCHITECTURE
-    ▸ TYPE '/help' TO LIST COMMANDS | 'exit' TO QUIT
+    ▸ TYPE '/chat <msg>' FOR AI | '/help' FOR COMMANDS | 'exit' TO QUIT
 {Colors.RESET}
 """
         print(banner)
@@ -161,12 +161,43 @@ class DecyphertekCLI:
                 self.show_status()
             elif command == '/config':
                 self.show_config()
+            elif command == '/chat':
+                # Extract message after /chat
+                message = user_input[5:].strip()
+                if message:
+                    self.call_adminotaur(message)
+                else:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
             else:
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
         else:
-            # Route to Adminotaur agent
-            self.call_adminotaur(user_input)
+            # Execute as Linux shell command
+            self.execute_shell_command(user_input)
+    
+    def execute_shell_command(self, command):
+        """Execute a shell command and display output"""
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.stdout:
+                print(result.stdout, end='')
+            if result.stderr:
+                print(f"{Colors.BLUE}{result.stderr}{Colors.RESET}", end='')
+            
+            if result.returncode != 0 and not result.stderr:
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command exited with code {result.returncode}")
+        
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out")
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
     
     def call_adminotaur(self, user_input):
         """Call Adminotaur agent with user input"""
@@ -196,10 +227,12 @@ class DecyphertekCLI:
     def show_help(self):
         """Show available commands"""
         print(f"\n{Colors.CYAN}{Colors.BOLD}Available Commands:{Colors.RESET}\n")
-        print(f"{Colors.GREEN}/help{Colors.RESET}     - Show this help message")
-        print(f"{Colors.GREEN}/status{Colors.RESET}   - Show system status")
-        print(f"{Colors.GREEN}/config{Colors.RESET}   - Show configuration")
-        print(f"{Colors.GREEN}exit{Colors.RESET}      - Exit application\n")
+        print(f"{Colors.GREEN}/chat <message>{Colors.RESET}  - Chat with AI assistant")
+        print(f"{Colors.GREEN}/help{Colors.RESET}            - Show this help message")
+        print(f"{Colors.GREEN}/status{Colors.RESET}          - Show system status")
+        print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
+        print(f"{Colors.GREEN}exit{Colors.RESET}             - Exit application")
+        print(f"\n{Colors.CYAN}Note:{Colors.RESET} Regular commands are executed as shell commands\n")
     
     def show_status(self):
         """Show system status"""
