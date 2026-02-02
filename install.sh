@@ -14,7 +14,7 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.decyphertek.ai/bin"
 APP_NAME="decyphertek.ai"
 GITHUB_REPO="decyphertek-io/decyphertek-ai"
-DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${APP_NAME}"
+DOWNLOAD_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/main/cli/dist/${APP_NAME}"
 
 echo ""
 echo "========================================="
