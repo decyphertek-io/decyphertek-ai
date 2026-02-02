@@ -1,62 +1,157 @@
-# DecypherTek AI
+# Decyphertek-AI Architecture Plan
 
-THIS IS IN DEV: WORKING ON RE-ARCHITECTING TO BE SIMPLE & MODULAR VIA CLI. TO ALSO INCLUDE SOURCE CODE. 
-Linux based decyphertek.ai chat. Modular stores: mcp ; agent ; app , to customize AI . 
+## Overview
+A modular Sysadmin AI CLI application built with a supervisor-worker agent architecture.
 
-## Features
+## Tech Stack
+- **LangChain**: Agent orchestration and workflow management
+- **FastMCP**: MCP server implementation for skills/tools
+- **ChromaDB**: Vector database for RAG functionality
+- **uv**: Python version and dependency management
+- **PyInstaller**: Executable packaging
 
-- **AI Chat** - Generalized / Specialized AI chat.
-- **Rag Chat** - Upload docs and inquire about them. 
-- **App Store** - Python apps.
-- **Agent Store** - AI Workers.
-- **MCP Servers** - AI Skills.
+## Architecture
 
-## Quick Start
+### Core Components
+
+#### 1. Agent System (LangChain-based)
+- **Adminotaur Agent** (Supervisor)
+  - Core orchestration agent
+  - Coordinates worker agents
+  - Integrates MCP skills
+  - Routes tasks to appropriate workers
+  - Manages agent lifecycle
+
+- **Worker Agents** (Modular)
+  - Specialized task agents
+  - Automation agents
+  - Scheduled task agents
+  - Domain-specific agents (network, security, monitoring, etc.)
+
+#### 2. MCP Skills Layer (FastMCP)
+- Modular skill servers
+- Add/remove skills dynamically
+- Tool exposure to agents
+- System interaction capabilities
+
+#### 3. RAG System (ChromaDB)
+- **Document Indexing**
+  - Configurable directory scanning
+  - Support for: PDFs, EPUBs, DOCs, TXT, MD
+  - Automatic embedding generation
+  - Incremental updates
+
+- **Context Retrieval**
+  - Semantic search over indexed documents
+  - Permission-based access control
+  - Query-relevant context injection
+
+#### 4. CLI Interface
+- Command-line interaction
+- Agent selection
+- Task execution
+- Configuration management
+
+## Data Flow
+
 ```
-# Install the Decyphertek.ai app. 
-curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/install.sh | sudo bash
-
-# Reverse Engineer the app.
-curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/engineer.sh | sudo bash
-
-# Uninstall the app.
-curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/uninstall.sh | sudo bash
-
-* Setup > Create creds > add settings > AI Admin Chat . 
-
-# Decyphertek AI working directory:
-cd ~/.decyphertek-ai/
-
-# Optional: Application desktop icon works with xfce. May need to edit.
-vim /usr/share/applications/decyphertek-ai.desktop
-
-# Debugging:
-/opt/decyphertak.ai 
-* This will run the app and show terminal output for debugging issues.
-* Run this from chat to help debug.
-sudo systemctl status mcp
-sudo systemctl status agent
-sudo systemctl status app
-healthcheck-agent
-
-# Experimental commands:
-# Make sure the research toggle is enabled.
-@research
-Then ask a question, AI will research and store it in a note. 
+User Input → CLI → Adminotaur Agent → [Worker Agents | MCP Skills | RAG Context] → Response
 ```
 
-Screenshots:
------------
-* Research Mode:
-![Research Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/research.png)
+## Modularity Benefits
+- Add/remove agents without core changes
+- Plug-and-play MCP skills
+- Configurable RAG directories
+- Independent component updates
 
-* Web Mode:
-![Web Mode:](https://raw.githubusercontent.com/decyphertek-io/configs/main/Logos/web.png)
+## Configuration
+- Agent registry (enable/disable agents)
+- MCP skill manifest
+- RAG directory whitelist
+- Permissions and access control
 
-![Engineer Mode:](https://github.com/decyphertek-io/configs/blob/main/Logos/reverse-engineer.png)
+## Deployment
+- **Build System**: uv + PyInstaller
+  - uv manages Python 3.12 environment automatically
+  - Locks dependencies for consistent builds across Linux systems
+  - PyInstaller creates single portable executable
+- **Distribution**:
+  - Single executable binary
+  - Embedded dependencies
+  - Portable configuration files
 
-References:
------------
+---
+
+## Implementation Architecture
+
+### Simple Flow
 ```
-https://decyphertek.readthedocs.io/en/latest/technotes/Decyphertek-ai/
+Main App (cli-ai.py)
+  ↓ Password unlock at startup
+  ↓ Manages ~/.decyphertek.ai/creds (SSH key encrypted)
+  ↓
+Adminotaur (supervisor agent)
+  ↓ Coordinates tasks and worker agents
+  ↓
+MCP Gateway (FastMCP)
+  ↓ Requests decrypted creds from main app when needed
+  ↓
+MCP Skills
 ```
+
+### Main App (cli-ai.py)
+**Responsibilities**:
+- Terminal interface with password protection at startup
+- Manage `~/.decyphertek.ai/` working directory
+- Encrypt/decrypt credentials using SSH keys
+- Store encrypted creds in `~/.decyphertek.ai/creds/`
+- Provide decrypted credentials to MCP Gateway on request (memory only)
+- Initialize and communicate with Adminotaur
+
+**Security**:
+- Password-protected app launch
+- SSH key-based credential encryption
+- Credentials encrypted at rest in `~/.decyphertek.ai/creds/`
+- Credentials only decrypted in memory when MCP Gateway needs them
+- No plaintext credentials written to disk
+
+### Adminotaur (adminotaur.py)
+**Responsibilities**:
+- LangChain supervisor agent
+- Coordinate worker agents
+- Route tasks to appropriate agents/skills
+- Monitor execution and handle errors
+- Act as system administrator/orchestrator
+
+### MCP Gateway (mcp_gateway.py)
+**Responsibilities**:
+- FastMCP client implementation
+- Connect to MCP servers
+- Load and expose MCP skills
+- Request credentials from main app when connecting to servers
+- Provide tools to Adminotaur and worker agents
+
+### File Structure
+```
+cli/
+├── cli-ai.py              # Main app with password protection & credential management
+├── adminotaur.py          # LangChain supervisor agent
+├── mcp_gateway.py         # FastMCP gateway
+├── build.sh               # Build script
+└── pyproject.toml         # Dependencies
+
+~/.decyphertek.ai/         # Working directory (created at runtime)
+├── creds/                 # Encrypted credentials (SSH key encrypted)
+│   ├── github_token
+│   ├── openai_key
+│   └── ...
+└── config/                # Configuration files
+    └── mcp_servers.json   # MCP server configurations
+```
+
+### Security Model
+- **App Launch**: Password required to unlock main app
+- **Creds at Rest**: All credentials in `~/.decyphertek.ai/creds/` encrypted with SSH public key
+- **Creds in Use**: Main app decrypts with SSH private key only when MCP Gateway requests
+- **Memory Only**: Decrypted credentials passed to MCP Gateway in memory, never written to disk
+- **SSH Key**: Can be password-protected for additional security layer

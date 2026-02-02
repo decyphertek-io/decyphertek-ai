@@ -34,7 +34,8 @@ class DecyphertekCLI:
         self.mcp_skills_dir = self.app_dir / "mcp-skills"
         self.ssh_key_path = self.home_dir / ".ssh" / "decyphertek.ai"
         self.password_file = self.app_dir / ".password_hash"
-        self.adminotaur_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/adminotaur/adminotaur.agent"
+        self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.json"
+        self.workers_registry_path = self.agent_workers_dir / "workers.json"
         self.adminotaur_path = self.agent_workers_dir / "adminotaur.agent"
         
     def show_banner(self):
@@ -191,14 +192,44 @@ class DecyphertekCLI:
         
         return False
     
-    def download_adminotaur(self):
-        """Download Adminotaur agent from agent-store"""
-        print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
+    def download_workers_registry(self):
+        """Download workers.json registry from agent-store"""
         try:
-            with urllib.request.urlopen(self.adminotaur_url) as response:
+            with urllib.request.urlopen(self.workers_registry_url) as response:
+                registry_data = response.read()
+                self.workers_registry_path.write_bytes(registry_data)
+                return True
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download workers registry: {e}")
+            return False
+    
+    def download_adminotaur(self):
+        """Download Adminotaur agent using workers.json registry"""
+        print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading agent registry...")
+        
+        # Download workers.json first
+        if not self.download_workers_registry():
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download workers registry")
+            return
+        
+        # Parse workers.json to get adminotaur download URL
+        try:
+            registry_data = json.loads(self.workers_registry_path.read_text())
+            adminotaur_config = registry_data.get("agents", {}).get("adminotaur", {})
+            download_url = adminotaur_config.get("download_url")
+            
+            if not download_url:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} No download URL found in registry")
+                return
+            
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
+            
+            # Download adminotaur.agent
+            with urllib.request.urlopen(download_url) as response:
                 agent_data = response.read()
                 self.adminotaur_path.write_bytes(agent_data)
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Adminotaur agent downloaded: {self.adminotaur_path}")
+                
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
     
