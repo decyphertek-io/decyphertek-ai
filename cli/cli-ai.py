@@ -37,6 +37,7 @@ class DecyphertekCLI:
     def __init__(self):
         self.version = "0.1.0"
         self.home_dir = Path.home()
+        self.current_dir = str(self.home_dir)
         self.app_dir = self.home_dir / ".decyphertek.ai"
         self.creds_dir = self.app_dir / "creds"
         self.config_dir = self.app_dir / "config"
@@ -178,13 +179,32 @@ class DecyphertekCLI:
     def execute_shell_command(self, command):
         """Execute a shell command and display output"""
         try:
+            # Handle cd command specially to maintain directory state
+            if command.strip().startswith('cd '):
+                new_dir = command.strip()[3:].strip()
+                if not new_dir:
+                    self.current_dir = str(self.home_dir)
+                else:
+                    # Expand ~ and resolve path
+                    if new_dir.startswith('~'):
+                        new_dir = str(Path.home() / new_dir[2:].lstrip('/'))
+                    elif not new_dir.startswith('/'):
+                        new_dir = str(Path(self.current_dir) / new_dir)
+                    
+                    # Check if directory exists
+                    if Path(new_dir).is_dir():
+                        self.current_dir = str(Path(new_dir).resolve())
+                    else:
+                        print(f"{Colors.BLUE}[ERROR]{Colors.RESET} cd: {new_dir}: No such file or directory")
+                return
+            
             result = subprocess.run(
                 command,
                 shell=True,
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=str(Path.home())
+                cwd=self.current_dir
             )
             
             if result.stdout:
@@ -323,11 +343,10 @@ class DecyphertekCLI:
                 ], check=True, capture_output=True)
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} SSH key generated: {self.ssh_key_path}")
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {self.ssh_key_path}.pub")
+                print()
             except subprocess.CalledProcessError as e:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate SSH key: {e}")
                 sys.exit(1)
-        
-        print(f"\n{Colors.GREEN}{Colors.BOLD}[✓] Setup complete!{Colors.RESET}\n")
     
     def authenticate(self):
         """Authenticate user with password"""
