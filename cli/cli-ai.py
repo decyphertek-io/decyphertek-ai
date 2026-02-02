@@ -21,7 +21,7 @@ class DecyphertekCLI:
 {Colors.CYAN}{Colors.BOLD}
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
-║                {Colors.GREEN}D E C Y P H E R T E K . A I{Colors.CYAN}                ║
+║                  {Colors.GREEN}D E C Y P H E R T E K . A I{Colors.CYAN}                  ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 {Colors.RESET}
