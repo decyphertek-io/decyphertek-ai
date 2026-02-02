@@ -77,7 +77,7 @@ Removes `~/.decyphertek.ai/` and `~/.ssh/decyphertek.ai`
 #### 3. RAG System (ChromaDB)
 - **Document Indexing**
   - Configurable directory scanning
-  - Supports: TXT, DOCX, PDF, EPUB, MD
+  - Supports: TXT, DOCX, PDF, EPUB, MD, YAML, JSON, CSV, HTML, XML
   - Automatic embedding generation
   - Incremental updates
 
