@@ -183,7 +183,8 @@ class DecyphertekCLI:
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                cwd=str(Path.home())
             )
             
             if result.stdout:

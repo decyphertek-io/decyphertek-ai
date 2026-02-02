@@ -1,0 +1,97 @@
+[✓] Created MCP store directory: /home/adminotaur/.decyphertek.ai/mcp-store
+[✓] Created app store directory: /home/adminotaur/.decyphertek.ai/app-store
+[✓] Created keys directory: /home/adminotaur/.decyphertek.ai/keys
+
+[SETUP] Downloading configuration files...
+[✓] Downloaded ai-config.json
+[✓] Downloaded slash-commands.json
+
+[SETUP] Set a master password to protect the application:
+Enter password: 
+Confirm password: 
+[✓] Password set successfully
+
+[SETUP] Generating SSH key for credential encryption...
+[✓] SSH key generated: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai
+[✓] Public key: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai.pub
+
+[✓] Setup complete!
+
+
+[SYSTEM] Downloading enabled agents, skills, and apps...
+
+[✓] Downloaded agent: adminotaur
+[✓] Downloaded skill: mcp-gateway
+[✓] Downloaded skill: openrouter-ai
+[✓] Downloaded skill: rag-chat
+[✓] Downloaded skill: web-search
+[✓] Downloaded app: chromadb
+
+[SETUP] OpenRouter AI is enabled but no API key found.
+[SETUP] Please enter your API key to continue.
+
+Enter OpenRouter AI API key: 
+[✓] API key stored and encrypted
+
+┌─[decyphertek.ai]
+└──▸ ls
+decyphertek.ai
+┌─[decyphertek.ai]
+└──▸ cd ~
+┌─[decyphertek.ai]
+└──▸ ls
+decyphertek.ai
+┌─[decyphertek.ai]
+└──▸ cd /home
+┌─[decyphertek.ai]
+└──▸ ls
+decyphertek.ai
+┌─[decyphertek.ai]
+└──▸ pwd
+/home/adminotaur/Documents/git/decyphertek-ai/cli/dist
+┌─[decyphertek.ai]
+└──▸ sudo apt update
+[sudo] password for adminotaur: 
+Hit:1 https://dl.google.com/linux/chrome/deb stable InRelease
+Get:2 https://security.debian.org/debian-security trixie-security InRelease [43.4 kB]
+Hit:3 https://packages.cloud.google.com/apt cloud-sdk InRelease
+Hit:4 https://updates.signal.org/desktop/apt xenial InRelease
+Hit:5 https://download.vscodium.com/debs vscodium InRelease
+Get:6 https://apt.releases.hashicorp.com trixie InRelease [12.9 kB]
+Hit:7 https://download.docker.com/linux/debian trixie InRelease
+Hit:8 https://deb.debian.org/debian trixie InRelease
+Hit:9 https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/apt stable InRelease
+Hit:10 https://packages.microsoft.com/repos/azure-cli bookworm InRelease
+Get:11 https://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+Hit:12 https://deb.nodesource.com/node_22.x nodistro InRelease
+Get:13 https://apt.releases.hashicorp.com trixie/main amd64 Packages [218 kB]
+Fetched 322 kB in 3s (114 kB/s)
+Reading package lists...
+Building dependency tree...
+Reading state information...
+All packages are up to date.
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+┌─[decyphertek.ai]
+└──▸ /help
+
+Available Commands:
+
+/chat <message>  - Chat with AI assistant
+/help            - Show this help message
+/status          - Show system status
+/config          - Show configuration
+exit             - Exit application
+
+Note: Regular commands are executed as shell commands
+
+┌─[decyphertek.ai]
+└──▸ /chat How are you doing today?
+[ERROR] Adminotaur failed: Traceback (most recent call last):
+  File "adminotaur.py", line 15, in <module>
+ImportError: cannot import name 'AgentExecutor' from 'langchain.agents' (/tmp/_MEIKLDUn0/langchain/agents/__init__.py)
+[PYI-63921:ERROR] Failed to execute script 'adminotaur' due to unhandled exception!
+
+┌─[decyphertek.ai]
+└──▸ 
