@@ -50,7 +50,10 @@ User
 CLI (cli-ai.py)
   ↓ Password protection
   ↓ Credential encryption/decryption
-  ↓ Downloads agents/skills from GitHub
+  ↓
+  ├─> agent-store (GitHub) → Downloads Adminotaur + workers
+  ├─> mcp-store (GitHub) → Downloads MCP skills
+  └─> app-store (GitHub) → Downloads apps (ChromaDB, etc.)
   ↓
 Adminotaur Agent (LangChain supervisor)
   ↓ Routes queries and slash commands
@@ -66,8 +69,22 @@ AI Provider (OpenRouter, etc.)
 ```
 
 **Flow:**
-- CLI handles auth, credential storage, and downloads
+- CLI downloads agents from agent-store, skills from mcp-store, apps from app-store
 - Adminotaur routes user input to workers or MCP skills
-- MCP Gateway proxies skill requests and manages credentials
-- Skills call external APIs with decrypted credentials
+- MCP Gateway manages skills and retrieves encrypted credentials
+- Skills call AI providers with decrypted credentials
+
+## References
+
+### Repositories
+- **[agent-store](https://github.com/decyphertek-io/agent-store)** - LangChain agents (Adminotaur + workers)
+- **[mcp-store](https://github.com/decyphertek-io/mcp-store)** - MCP skills (web-search, rag-chat, etc.)
+- **[app-store](https://github.com/decyphertek-io/app-store)** - Standalone apps (ChromaDB, etc.)
+
+### Tech Stack
+- **[LangChain](https://python.langchain.com/)** - Agent orchestration framework
+- **[FastMCP](https://github.com/jlowin/fastmcp)** - MCP server implementation
+- **[ChromaDB](https://www.trychroma.com/)** - Vector database for RAG
+- **[uv](https://docs.astral.sh/uv/)** - Python package and project manager
+- **[PyInstaller](https://pyinstaller.org/)** - Python executable packager
 

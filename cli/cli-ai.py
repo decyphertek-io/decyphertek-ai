@@ -55,7 +55,7 @@ class DecyphertekCLI:
         # Registry URLs
         self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.json"
         self.skills_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
-        self.configs_base_url = "https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/configs/"
+        self.configs_base_url = "https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/cli/configs/"
         
         # Registry paths
         self.workers_registry_path = self.agent_store_dir / "workers.json"
