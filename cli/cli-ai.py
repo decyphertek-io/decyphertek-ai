@@ -30,13 +30,24 @@ class DecyphertekCLI:
         self.app_dir = self.home_dir / ".decyphertek.ai"
         self.creds_dir = self.app_dir / "creds"
         self.config_dir = self.app_dir / "config"
-        self.agent_workers_dir = self.app_dir / "agent-workers"
-        self.mcp_skills_dir = self.app_dir / "mcp-skills"
+        self.agent_store_dir = self.app_dir / "agent-store"
+        self.mcp_store_dir = self.app_dir / "mcp-store"
+        self.app_store_dir = self.app_dir / "app-store"
         self.ssh_key_path = self.home_dir / ".ssh" / "decyphertek.ai"
         self.password_file = self.app_dir / ".password_hash"
+        
+        # Registry URLs
         self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.json"
-        self.workers_registry_path = self.agent_workers_dir / "workers.json"
-        self.adminotaur_path = self.agent_workers_dir / "adminotaur.agent"
+        self.skills_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        
+        # Registry paths
+        self.workers_registry_path = self.agent_store_dir / "workers.json"
+        self.skills_registry_path = self.mcp_store_dir / "skills.json"
+        
+        # Adminotaur paths
+        self.adminotaur_dir = self.agent_store_dir / "adminotaur"
+        self.adminotaur_agent_path = self.adminotaur_dir / "adminotaur.agent"
+        self.adminotaur_md_path = self.adminotaur_dir / "adminotaur.md"
         
     def show_banner(self):
         banner = f"""
@@ -85,7 +96,7 @@ class DecyphertekCLI:
             sys.exit(1)
         
         # Download Adminotaur agent if not present
-        if not self.adminotaur_path.exists():
+        if not self.adminotaur_agent_path.exists():
             self.download_adminotaur()
         
         if args.command:
@@ -121,21 +132,24 @@ class DecyphertekCLI:
     
     def first_run_setup(self):
         """First-run setup: create directories, password, SSH key"""
-        print(f"\n{Colors.CYAN}{Colors.BOLD}=== FIRST RUN SETUP ==={Colors.RESET}\n")
-        print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Welcome! Let's set up Decyphertek.ai\n")
+        print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} First run detected. Setting up Decyphertek AI...\n")
         
         # Create directories
         self.app_dir.mkdir(exist_ok=True)
         self.creds_dir.mkdir(exist_ok=True)
         self.config_dir.mkdir(exist_ok=True)
-        self.agent_workers_dir.mkdir(exist_ok=True)
-        self.mcp_skills_dir.mkdir(exist_ok=True)
+        self.agent_store_dir.mkdir(exist_ok=True)
+        self.mcp_store_dir.mkdir(exist_ok=True)
+        self.app_store_dir.mkdir(exist_ok=True)
+        self.adminotaur_dir.mkdir(exist_ok=True)
         (self.home_dir / ".ssh").mkdir(exist_ok=True)
         
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created working directory: {self.app_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created credentials directory: {self.creds_dir}")
-        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created agent workers directory: {self.agent_workers_dir}")
-        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created MCP skills directory: {self.mcp_skills_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created agent workers directory: {self.agent_store_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created MCP skills directory: {self.mcp_store_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created app store directory: {self.app_store_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created adminotaur directory: {self.adminotaur_dir}")
         
         # Set password
         print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Set a master password to protect the application:")
@@ -203,6 +217,17 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download workers registry: {e}")
             return False
     
+    def download_skills_registry(self):
+        """Download skills.json registry from mcp-store"""
+        try:
+            with urllib.request.urlopen(self.skills_registry_url) as response:
+                registry_data = response.read()
+                self.skills_registry_path.write_bytes(registry_data)
+                return True
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download skills registry: {e}")
+            return False
+    
     def download_adminotaur(self):
         """Download Adminotaur agent using workers.json registry"""
         print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading agent registry...")
@@ -212,23 +237,33 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download workers registry")
             return
         
-        # Parse workers.json to get adminotaur download URL
+        # Parse workers.json to get adminotaur URLs
         try:
             registry_data = json.loads(self.workers_registry_path.read_text())
             adminotaur_config = registry_data.get("agents", {}).get("adminotaur", {})
-            download_url = adminotaur_config.get("download_url")
+            agent_url = adminotaur_config.get("download_url")
+            md_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/adminotaur/adminotaur.md"
             
-            if not download_url:
+            if not agent_url:
                 print(f"{Colors.BLUE}[WARNING]{Colors.RESET} No download URL found in registry")
                 return
             
             print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
             
             # Download adminotaur.agent
-            with urllib.request.urlopen(download_url) as response:
+            with urllib.request.urlopen(agent_url) as response:
                 agent_data = response.read()
-                self.adminotaur_path.write_bytes(agent_data)
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Adminotaur agent downloaded: {self.adminotaur_path}")
+                self.adminotaur_agent_path.write_bytes(agent_data)
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: adminotaur.agent")
+            
+            # Download adminotaur.md
+            try:
+                with urllib.request.urlopen(md_url) as response:
+                    md_data = response.read()
+                    self.adminotaur_md_path.write_bytes(md_data)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: adminotaur.md")
+            except Exception as e:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download adminotaur.md: {e}")
                 
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
