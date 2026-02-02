@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-import sys
-import argparse
 import os
+import sys
 import json
 import hashlib
 import getpass
+import argparse
 import subprocess
 import urllib.request
+import readline
+import glob
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -115,9 +117,6 @@ class DecyphertekCLI:
                 print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Authentication failed. Exiting.\n")
                 sys.exit(1)
         
-        # Download all enabled agents, skills, and apps
-        self.download_all_stores()
-        
         # Check for missing credentials
         self.check_credentials()
         
@@ -130,6 +129,11 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}[EXEC]{Colors.RESET} {command}")
         
     def interactive_mode(self):
+        # Setup tab completion
+        readline.set_completer_delims(' \t\n')
+        readline.parse_and_bind('tab: complete')
+        readline.set_completer(self._completer)
+        
         while True:
             try:
                 # Show current directory in prompt
@@ -150,6 +154,49 @@ class DecyphertekCLI:
                 break
             except EOFError:
                 break
+    
+    def _completer(self, text, state):
+        """Tab completion for paths and slash commands"""
+        try:
+            line = readline.get_line_buffer()
+            
+            # Complete slash commands
+            if line.startswith('/'):
+                commands = ['/chat ', '/help', '/status', '/config']
+                matches = [cmd for cmd in commands if cmd.startswith(line)]
+                if state < len(matches):
+                    return matches[state]
+                return None
+            
+            # Complete file/directory paths
+            if not text:
+                text = ''
+            
+            # Handle ~ expansion
+            if text.startswith('~'):
+                text = str(Path.home()) + text[1:]
+            
+            # Get absolute path for completion
+            if text.startswith('/'):
+                search_path = text
+            else:
+                search_path = os.path.join(self.current_dir, text)
+            
+            # Find matches
+            matches = glob.glob(search_path + '*')
+            
+            # Convert back to relative paths if needed
+            if not text.startswith('/'):
+                matches = [os.path.relpath(m, self.current_dir) for m in matches]
+            
+            # Add trailing slash for directories
+            matches = [m + '/' if os.path.isdir(os.path.join(self.current_dir, m) if not m.startswith('/') else m) else m for m in matches]
+            
+            if state < len(matches):
+                return matches[state]
+            return None
+        except:
+            return None
     
     def process_input(self, user_input):
         """Process user input and route to appropriate handler"""
@@ -349,6 +396,9 @@ class DecyphertekCLI:
             except subprocess.CalledProcessError as e:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate SSH key: {e}")
                 sys.exit(1)
+        
+        # Download all enabled agents, skills, and apps (only on first run)
+        self.download_all_stores()
     
     def authenticate(self):
         """Authenticate user with password"""
