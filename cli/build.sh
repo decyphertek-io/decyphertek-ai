@@ -20,6 +20,10 @@ source .venv/bin/activate
 uv pip install pyinstaller cryptography
 
 echo ""
+echo "Cleaning previous build..."
+rm -rf dist build *.spec
+
+echo ""
 echo "Building executable with PyInstaller..."
 pyinstaller --onefile \
     --name decyphertek.ai \

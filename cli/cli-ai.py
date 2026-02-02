@@ -132,7 +132,9 @@ class DecyphertekCLI:
     def interactive_mode(self):
         while True:
             try:
-                user_input = input(f"{Colors.CYAN}┌─[{Colors.GREEN}decyphertek.ai{Colors.CYAN}]\n└──▸{Colors.RESET} ").strip()
+                # Show current directory in prompt
+                display_dir = self.current_dir.replace(str(self.home_dir), '~')
+                user_input = input(f"{Colors.GREEN}decyphertek.ai{Colors.RESET}:{Colors.BLUE}{display_dir}{Colors.RESET}$ ").strip()
                 
                 if user_input.lower() in ['exit', 'quit']:
                     print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Exiting Decyphertek.ai\n")
