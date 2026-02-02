@@ -82,101 +82,76 @@ User Input → CLI → Adminotaur Agent → [Worker Agents | MCP Skills | RAG Co
 
 ---
 
-## Implementation Architecture (3-Tier Design)
+## Implementation Architecture
 
-### Layer 1: CLI Layer
-**File**: `cli-ai.py`, `secret_manager.py`
+### Simple Flow
+```
+Main App (cli-ai.py)
+  ↓ Password unlock at startup
+  ↓ Manages ~/.decyphertek.ai/creds (SSH key encrypted)
+  ↓
+Adminotaur (supervisor agent)
+  ↓ Coordinates tasks and worker agents
+  ↓
+MCP Gateway (FastMCP)
+  ↓ Requests decrypted creds from main app when needed
+  ↓
+MCP Skills
+```
 
+### Main App (cli-ai.py)
 **Responsibilities**:
-- User interface and interaction
-- Secret management with SSH key-based encryption
-- Configuration file management
-- Decrypt credentials and pass to MCP Gateway
-- Display responses to user
+- Terminal interface with password protection at startup
+- Manage `~/.decyphertek.ai/` working directory
+- Encrypt/decrypt credentials using SSH keys
+- Store encrypted creds in `~/.decyphertek.ai/creds/`
+- Provide decrypted credentials to MCP Gateway on request (memory only)
+- Initialize and communicate with Adminotaur
 
-**Components**:
-- `DecyphertekCLI` - Main CLI interface class
-- `SecretManager` - SSH key encryption/decryption for credentials
-- `config/secrets.json` - Encrypted API keys and credentials
-- `config/mcp_servers.json` - MCP server configurations
+**Security**:
+- Password-protected app launch
+- SSH key-based credential encryption
+- Credentials encrypted at rest in `~/.decyphertek.ai/creds/`
+- Credentials only decrypted in memory when MCP Gateway needs them
+- No plaintext credentials written to disk
 
-### Layer 2: MCP Gateway (FastMCP)
-**File**: `mcp_gateway.py`
-
+### Adminotaur (adminotaur.py)
 **Responsibilities**:
-- Connect to configured MCP servers
-- Load and expose MCP skills/tools
-- Handle MCP protocol communication
-- Provide tool interface for Adminotaur and worker agents
-- Manage MCP server lifecycle
-
-**Components**:
-- `MCPGateway` class using FastMCP client
-- MCP server connection pool
-- Tool registry and exposure
-- Skill discovery and loading
-
-### Layer 3: Adminotaur (LangChain Supervisor Agent)
-**File**: `adminotaur.py`
-
-**Responsibilities**:
+- LangChain supervisor agent
 - Coordinate worker agents
-- Route tasks to appropriate agents
-- Monitor agent execution and health
-- Handle errors and implement retry logic
-- Ensure tasks complete successfully
+- Route tasks to appropriate agents/skills
+- Monitor execution and handle errors
 - Act as system administrator/orchestrator
 
-**Components**:
-- `Adminotaur` class - LangChain supervisor agent
-- Task routing logic
-- Agent registry and lifecycle management
-- Error handling and recovery
-- Status monitoring and reporting
-
-### Layer 4: Worker Agents (Future)
-**Files**: `agents/*.py`
-
+### MCP Gateway (mcp_gateway.py)
 **Responsibilities**:
-- Execute specialized tasks
-- Use MCP tools from gateway
-- Report status to Adminotaur
-- Domain-specific operations (network, security, monitoring, etc.)
-
-### Data Flow
-```
-User Input 
-  ↓
-CLI Layer (decrypt secrets, manage config)
-  ↓
-MCP Gateway (connect to MCP servers, load skills)
-  ↓
-Adminotaur (analyze task, route to workers)
-  ↓
-Worker Agents (execute with MCP tools)
-  ↓
-Response back through layers to CLI
-```
+- FastMCP client implementation
+- Connect to MCP servers
+- Load and expose MCP skills
+- Request credentials from main app when connecting to servers
+- Provide tools to Adminotaur and worker agents
 
 ### File Structure
 ```
 cli/
-├── cli-ai.py              # Main CLI + user interface
-├── secret_manager.py      # SSH key encryption/decryption
-├── mcp_gateway.py         # FastMCP gateway implementation
+├── cli-ai.py              # Main app with password protection & credential management
 ├── adminotaur.py          # LangChain supervisor agent
-├── agents/                # Future worker agents
-│   └── (specialized agents)
-├── config/
-│   ├── mcp_servers.json   # MCP server configurations
-│   └── secrets.json       # Encrypted credentials
+├── mcp_gateway.py         # FastMCP gateway
 ├── build.sh               # Build script
 └── pyproject.toml         # Dependencies
+
+~/.decyphertek.ai/         # Working directory (created at runtime)
+├── creds/                 # Encrypted credentials (SSH key encrypted)
+│   ├── github_token
+│   ├── openai_key
+│   └── ...
+└── config/                # Configuration files
+    └── mcp_servers.json   # MCP server configurations
 ```
 
 ### Security Model
-- **Secrets at Rest**: Encrypted with SSH public key
-- **Secrets in Use**: Decrypted by CLI using SSH private key
-- **Secret Passing**: Decrypted secrets passed to MCP Gateway in memory only
-- **No Disk Writes**: Decrypted secrets never written to disk
-- **SSH Key Protection**: Can use password-protected SSH keys for additional security
+- **App Launch**: Password required to unlock main app
+- **Creds at Rest**: All credentials in `~/.decyphertek.ai/creds/` encrypted with SSH public key
+- **Creds in Use**: Main app decrypts with SSH private key only when MCP Gateway requests
+- **Memory Only**: Decrypted credentials passed to MCP Gateway in memory, never written to disk
+- **SSH Key**: Can be password-protected for additional security layer
