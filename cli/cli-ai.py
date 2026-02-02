@@ -351,7 +351,7 @@ class DecyphertekCLI:
         except Exception as e:
             print(f"{Colors.RED}[✗]{Colors.RESET} MCP Gateway not reachable at localhost:9000")
             print(f"    Error: {str(e)}")
-            print(f"    {Colors.YELLOW}Hint:{Colors.RESET} Start MCP Gateway with: mcp-gateway.py")
+            print(f"    {Colors.YELLOW}Note:{Colors.RESET} Adminotaur will auto-start the gateway when needed")
         
         # Test MCP skills if gateway is running
         if gateway_running:
