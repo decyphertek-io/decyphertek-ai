@@ -21,6 +21,16 @@ curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/
 
 Installs to `~/.decyphertek.ai/bin/` and adds to PATH. No sudo required.
 
+### First Run
+
+On first run, the app will:
+1. Ask you to set a master password
+2. Generate SSH keys for credential encryption
+3. Detect if OpenRouter AI is enabled
+4. **Automatically prompt you for your API key if missing**
+
+That's it. No complex setup. The app handles everything.
+
 ### Run
 
 ```bash

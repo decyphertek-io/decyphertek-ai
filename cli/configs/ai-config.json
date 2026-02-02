@@ -1,0 +1,20 @@
+{
+  "_version": "1.0.0",
+  "_description": "AI provider configuration for Adminotaur - Credentials managed by MCP Gateway",
+  "providers": {
+    "openrouter-ai": {
+      "name": "OpenRouter AI",
+      "mcp_skill": "openrouter-ai",
+      "default_model": "anthropic/claude-4.5-sonnet",
+      "enabled": true,
+      "credential_service": "openrouter"
+    }
+  },
+  "default_provider": "openrouter-ai",
+  "mcp_gateway": {
+    "host": "localhost",
+    "port": 9000,
+    "enabled": true,
+    "credential_encryption": "ssh_keys"
+  }
+}

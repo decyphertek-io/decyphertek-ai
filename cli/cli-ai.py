@@ -14,6 +14,16 @@ from cryptography.hazmat.backends import default_backend
 import base64
 
 
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        base_path = Path(__file__).parent
+    return base_path / relative_path
+
+
 class Colors:
     CYAN = '\033[96m'
     GREEN = '\033[92m'
@@ -37,9 +47,15 @@ class DecyphertekCLI:
         self.ssh_key_path = self.keys_dir / "decyphertek.ai"
         self.password_file = self.app_dir / ".password_hash"
         
+        # Configs directory in user home
+        self.configs_dir = self.app_dir / "configs"
+        self.ai_config_path = self.configs_dir / "ai-config.json"
+        self.slash_commands_path = self.configs_dir / "slash-commands.json"
+        
         # Registry URLs
         self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.json"
         self.skills_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.configs_base_url = "https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/configs/"
         
         # Registry paths
         self.workers_registry_path = self.agent_store_dir / "workers.json"
@@ -100,6 +116,9 @@ class DecyphertekCLI:
         if not self.adminotaur_agent_path.exists():
             self.download_adminotaur()
         
+        # Check for missing credentials
+        self.check_credentials()
+        
         if args.command:
             self.execute_command(args.command)
         else:
@@ -139,6 +158,7 @@ class DecyphertekCLI:
         self.app_dir.mkdir(exist_ok=True)
         self.creds_dir.mkdir(exist_ok=True)
         self.config_dir.mkdir(exist_ok=True)
+        self.configs_dir.mkdir(exist_ok=True)
         self.agent_store_dir.mkdir(exist_ok=True)
         self.mcp_store_dir.mkdir(exist_ok=True)
         self.app_store_dir.mkdir(exist_ok=True)
@@ -147,10 +167,15 @@ class DecyphertekCLI:
         
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created working directory: {self.app_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created credentials directory: {self.creds_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created configs directory: {self.configs_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created agent store directory: {self.agent_store_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created MCP store directory: {self.mcp_store_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created app store directory: {self.app_store_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created keys directory: {self.keys_dir}")
+        
+        # Download config files
+        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Downloading configuration files...")
+        self.download_configs()
         
         # Set password
         print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Set a master password to protect the application:")
@@ -206,6 +231,78 @@ class DecyphertekCLI:
                     print(f"{Colors.BLUE}[LOGIN]{Colors.RESET} Incorrect password. {remaining} attempts remaining.")
         
         return False
+    
+    def check_credentials(self):
+        """Check ai-config.json and prompt for missing credentials"""
+        if not self.ai_config_path.exists():
+            return
+        
+        try:
+            ai_config = json.loads(self.ai_config_path.read_text())
+            providers = ai_config.get("providers", {})
+            
+            for provider_id, provider_config in providers.items():
+                if not provider_config.get("enabled", False):
+                    continue
+                
+                credential_service = provider_config.get("credential_service")
+                if not credential_service:
+                    continue
+                
+                cred_file = self.creds_dir / f"{credential_service}.enc"
+                
+                if not cred_file.exists():
+                    print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} {provider_config.get('name', provider_id)} is enabled but no API key found.")
+                    print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Please enter your API key to continue.\n")
+                    
+                    api_key = getpass.getpass(f"Enter {provider_config.get('name', provider_id)} API key: ").strip()
+                    
+                    if api_key:
+                        self.store_credential(credential_service, api_key)
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} API key stored and encrypted\n")
+                    else:
+                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} No API key provided. AI features may not work.\n")
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error checking credentials: {e}")
+    
+    def store_credential(self, service: str, credential: str):
+        """Encrypt and store a credential"""
+        try:
+            pub_key_path = self.ssh_key_path.with_suffix(".pub")
+            
+            result = subprocess.run(
+                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(pub_key_path)],
+                input=credential.encode(),
+                capture_output=True
+            )
+            
+            if result.returncode != 0:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Encryption failed: {result.stderr.decode()}")
+                return False
+            
+            cred_file = self.creds_dir / f"{service}.enc"
+            cred_file.write_bytes(result.stdout)
+            cred_file.chmod(0o600)
+            return True
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store credential: {e}")
+            return False
+    
+    def download_configs(self):
+        """Download config files from GitHub"""
+        config_files = ["ai-config.json", "slash-commands.json"]
+        
+        for config_file in config_files:
+            try:
+                url = self.configs_base_url + config_file
+                with urllib.request.urlopen(url) as response:
+                    config_data = response.read()
+                    (self.configs_dir / config_file).write_bytes(config_data)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded {config_file}")
+            except Exception as e:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {config_file}: {e}")
     
     def download_workers_registry(self):
         """Download workers.json registry from agent-store"""
