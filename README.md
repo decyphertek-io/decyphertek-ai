@@ -10,6 +10,35 @@ A modular Sysadmin AI CLI application built with a supervisor-worker agent archi
 - **uv**: Python version and dependency management
 - **PyInstaller**: Executable packaging
 
+## Quick Start
+
+### Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/install.sh | bash
+```
+
+Installs to `~/.decyphertek.ai/bin/` and adds to PATH. No sudo required.
+
+### Run
+
+```bash
+decyphertek.ai
+```
+
+First run will:
+1. Set up password protection
+2. Generate SSH key for credential encryption
+3. Download Adminotaur supervisor agent
+
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/uninstall.sh | bash
+```
+
+Removes `~/.decyphertek.ai/` and `~/.ssh/decyphertek.ai`
+
 ## Architecture
 
 ### Core Components

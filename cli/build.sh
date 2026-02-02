@@ -22,7 +22,7 @@ uv pip install pyinstaller cryptography
 echo ""
 echo "Building executable with PyInstaller..."
 pyinstaller --onefile \
-    --name decyphertek-cli.ai \
+    --name decyphertek.ai \
     --clean \
     cli-ai.py
 
@@ -31,5 +31,5 @@ echo "Cleaning up build artifacts..."
 rm -rf .venv build *.spec
 
 echo ""
-echo "✓ Build complete! Executable: dist/decyphertek-cli.ai"
+echo "✓ Build complete! Executable: dist/decyphertek.ai"
 echo "✓ Clean build - no .venv or artifacts left behind"

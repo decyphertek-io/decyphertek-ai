@@ -1,179 +1,75 @@
 #!/bin/bash
 
-# Decyphertek AI Installer
-# This script downloads, installs, and creates a desktop launcher for decyphertek.ai
+# Decyphertek AI CLI Installer
+# Self-contained installation to ~/.decyphertek.ai
 
-set -e  # Exit on error
+set -e
 
-# Colors for output
-RED='\033[0;31m'
+# Colors
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Configuration
-INSTALL_DIR="/opt"
+INSTALL_DIR="$HOME/.decyphertek.ai/bin"
 APP_NAME="decyphertek.ai"
 GITHUB_REPO="decyphertek-io/decyphertek-ai"
 DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${APP_NAME}"
-DESKTOP_FILE="/usr/share/applications/decyphertek-ai.desktop"
 
-# Print colored messages
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+echo ""
+echo "========================================="
+echo "  Decyphertek AI CLI Installer"
+echo "========================================="
+echo ""
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# Check for curl
+if ! command -v curl &> /dev/null; then
+    echo "Error: curl is required but not installed"
+    exit 1
+fi
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+# Create directory
+echo -e "${BLUE}[INFO]${NC} Creating installation directory..."
+mkdir -p "${INSTALL_DIR}"
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-# Check if running as root
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        print_error "This script must be run as root (use sudo)"
-        exit 1
-    fi
-}
-
-# Check for required commands
-check_dependencies() {
-    print_info "Checking dependencies..."
-    
-    if ! command -v curl &> /dev/null; then
-        print_error "curl is not installed. Please install it first:"
-        echo "  Ubuntu/Debian: sudo apt install curl"
-        echo "  Fedora/RHEL: sudo dnf install curl"
-        echo "  Arch: sudo pacman -S curl"
-        exit 1
-    fi
-    
-    print_success "Dependencies check passed"
-}
-
-# Ensure libmpv exists for audio playback
-install_audio_dependencies() {
-    print_info "Ensuring libmpv audio dependency is installed..."
-
-    if ! dpkg -s libmpv2 >/dev/null 2>&1; then
-        print_info "Installing libmpv2..."
-        DEBIAN_FRONTEND=noninteractive apt-get install -y libmpv2
-    else
-        print_info "libmpv2 already installed"
-    fi
-
-    local LIBMPV_SO2="/usr/lib/x86_64-linux-gnu/libmpv.so.2"
-    local LIBMPV_SO1="/usr/lib/x86_64-linux-gnu/libmpv.so.1"
-
-    if [ -f "${LIBMPV_SO2}" ]; then
-        if [ ! -e "${LIBMPV_SO1}" ]; then
-            ln -s "${LIBMPV_SO2}" "${LIBMPV_SO1}"
-            print_success "Created libmpv.so.1 symlink"
-        else
-            print_info "libmpv.so.1 already present"
-        fi
-    else
-        print_warning "${LIBMPV_SO2} not found. Please ensure libmpv2 installed correctly."
-    fi
-}
-
-# Download the application
-download_app() {
-    print_info "Downloading ${APP_NAME}..."
-    
-    if curl -L -f -s "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/${APP_NAME}"; then
-        print_success "Downloaded ${APP_NAME}"
-    else
-        print_error "Failed to download ${APP_NAME}"
-        print_info "Please check if the release exists at: ${DOWNLOAD_URL}"
-        exit 1
-    fi
-}
+# Download
+echo -e "${BLUE}[INFO]${NC} Downloading ${APP_NAME}..."
+if curl -L -f -s "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/${APP_NAME}"; then
+    echo -e "${GREEN}[✓]${NC} Downloaded ${APP_NAME}"
+else
+    echo "Error: Failed to download ${APP_NAME}"
+    exit 1
+fi
 
 # Set permissions
-set_permissions() {
-    print_info "Setting executable permissions..."
-    chmod +x "${INSTALL_DIR}/${APP_NAME}"
-    print_success "Permissions set"
-}
+chmod +x "${INSTALL_DIR}/${APP_NAME}"
 
-# Create desktop launcher
-create_desktop_launcher() {
-    print_info "Creating desktop launcher..."
-    
-    cat > "${DESKTOP_FILE}" <<EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Decyphertek AI
-Comment=Decyphertek AI Application
-Exec=${INSTALL_DIR}/${APP_NAME}
-Icon=applications-science
-Terminal=false
-Categories=Utility;Application;
-Keywords=decyphertek;ai;
-StartupNotify=true
-EOF
-    
-    chmod +x "${DESKTOP_FILE}"
-    print_success "Desktop launcher created at ${DESKTOP_FILE}"
-}
+# Add to PATH if not already there
+SHELL_RC=""
+if [ -n "$BASH_VERSION" ]; then
+    SHELL_RC="$HOME/.bashrc"
+elif [ -n "$ZSH_VERSION" ]; then
+    SHELL_RC="$HOME/.zshrc"
+fi
 
-# Update desktop database
-update_desktop_database() {
-    print_info "Updating desktop database..."
-    
-    if command -v update-desktop-database &> /dev/null; then
-        update-desktop-database /usr/share/applications/ 2>/dev/null || true
-        print_success "Desktop database updated"
-    else
-        print_warning "update-desktop-database not found, skipping database update"
+if [ -n "$SHELL_RC" ]; then
+    if ! grep -q "/.decyphertek.ai/bin" "$SHELL_RC" 2>/dev/null; then
+        echo "" >> "$SHELL_RC"
+        echo "# Decyphertek AI CLI" >> "$SHELL_RC"
+        echo 'export PATH="$HOME/.decyphertek.ai/bin:$PATH"' >> "$SHELL_RC"
+        echo -e "${GREEN}[✓]${NC} Added to PATH in $SHELL_RC"
     fi
-}
+fi
 
-# Display completion message
-display_completion() {
-    echo ""
-    print_success "Installation completed successfully!"
-    echo ""
-    echo -e "${GREEN}The application has been installed to:${NC}"
-    echo -e "  ${BLUE}${INSTALL_DIR}/${APP_NAME}${NC}"
-    echo ""
-    echo -e "${GREEN}A desktop launcher has been created!${NC}"
-    echo -e "  ${BLUE}Look for 'Decyphertek AI' in your application menu${NC}"
-    echo ""
-    echo -e "${GREEN}You can also:${NC}"
-    echo -e "  ${BLUE}1.${NC} Find it in your XFCE application menu"
-    echo -e "  ${BLUE}2.${NC} Right-click on desktop > Create Launcher > Browse to find 'Decyphertek AI'"
-    echo -e "  ${BLUE}3.${NC} Run directly from terminal: ${BLUE}${INSTALL_DIR}/${APP_NAME}${NC}"
-    echo ""
-}
-
-# Main installation process
-main() {
-    echo ""
-    echo "========================================="
-    echo "  Decyphertek AI Installer"
-    echo "========================================="
-    echo ""
-    
-    check_root
-    check_dependencies
-    install_audio_dependencies
-    download_app
-    set_permissions
-    create_desktop_launcher
-    update_desktop_database
-    display_completion
-}
-
-# Run main function
-main
+echo ""
+echo -e "${GREEN}Installation complete!${NC}"
+echo ""
+echo -e "${BLUE}Installed to:${NC} ${INSTALL_DIR}/${APP_NAME}"
+echo ""
+echo -e "${BLUE}Run:${NC}"
+echo -e "  source $SHELL_RC  # Reload shell config"
+echo -e "  decyphertek.ai    # Start the CLI"
+echo ""
+echo -e "${BLUE}Or run directly:${NC}"
+echo -e "  ${INSTALL_DIR}/${APP_NAME}"
+echo ""
