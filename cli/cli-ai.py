@@ -33,7 +33,8 @@ class DecyphertekCLI:
         self.agent_store_dir = self.app_dir / "agent-store"
         self.mcp_store_dir = self.app_dir / "mcp-store"
         self.app_store_dir = self.app_dir / "app-store"
-        self.ssh_key_path = self.home_dir / ".ssh" / "decyphertek.ai"
+        self.keys_dir = self.app_dir / "keys"
+        self.ssh_key_path = self.keys_dir / "decyphertek.ai"
         self.password_file = self.app_dir / ".password_hash"
         
         # Registry URLs
@@ -142,14 +143,14 @@ class DecyphertekCLI:
         self.mcp_store_dir.mkdir(exist_ok=True)
         self.app_store_dir.mkdir(exist_ok=True)
         self.adminotaur_dir.mkdir(exist_ok=True)
-        (self.home_dir / ".ssh").mkdir(exist_ok=True)
+        self.keys_dir.mkdir(exist_ok=True)
         
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created working directory: {self.app_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created credentials directory: {self.creds_dir}")
-        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created agent workers directory: {self.agent_store_dir}")
-        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created MCP skills directory: {self.mcp_store_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created agent store directory: {self.agent_store_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created MCP store directory: {self.mcp_store_dir}")
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Created app store directory: {self.app_store_dir}")
-        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created adminotaur directory: {self.adminotaur_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Created keys directory: {self.keys_dir}")
         
         # Set password
         print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Set a master password to protect the application:")

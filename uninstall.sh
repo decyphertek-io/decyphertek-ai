@@ -19,8 +19,7 @@ echo ""
 
 # Confirm
 echo -e "${YELLOW}[WARNING]${NC} This will remove:"
-echo "  - ~/.decyphertek.ai/ (CLI, agents, creds, config)"
-echo "  - ~/.ssh/decyphertek.ai (SSH keys)"
+echo "  - ~/.decyphertek.ai/ (CLI, agents, creds, config, keys)"
 echo ""
 read -p "Continue? (y/N): " -n 1 -r
 echo ""
@@ -30,18 +29,11 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Remove ~/.decyphertek.ai
+# Remove ~/.decyphertek.ai (includes keys)
 if [ -d "$HOME/.decyphertek.ai" ]; then
     echo -e "${BLUE}[INFO]${NC} Removing ~/.decyphertek.ai..."
     rm -rf "$HOME/.decyphertek.ai"
     echo -e "${GREEN}[✓]${NC} Removed ~/.decyphertek.ai"
-fi
-
-# Remove SSH keys
-if [ -f "$HOME/.ssh/decyphertek.ai" ]; then
-    echo -e "${BLUE}[INFO]${NC} Removing SSH keys..."
-    rm -f "$HOME/.ssh/decyphertek.ai" "$HOME/.ssh/decyphertek.ai.pub"
-    echo -e "${GREEN}[✓]${NC} Removed SSH keys"
 fi
 
 # Remove PATH entry from shell config
