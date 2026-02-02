@@ -77,7 +77,7 @@ class DecyphertekCLI:
 {Colors.RESET}
 {Colors.BLUE}    ▸ SYSADMIN AI ASSISTANT v{self.version}
     ▸ MODULAR AGENT/MCP ARCHITECTURE
-    ▸ TYPE 'help' TO LIST COMMANDS | 'exit' TO QUIT
+    ▸ TYPE '/help' TO LIST COMMANDS | 'exit' TO QUIT
 {Colors.RESET}
 """
         print(banner)
@@ -104,13 +104,15 @@ class DecyphertekCLI:
         self.show_banner()
         
         # Check if first run
-        if not self.password_file.exists():
+        is_first_run = not self.password_file.exists()
+        if is_first_run:
             self.first_run_setup()
         
-        # Authenticate user
-        if not self.authenticate():
-            print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Authentication failed. Exiting.\n")
-            sys.exit(1)
+        # Authenticate user (skip if just completed first-run setup)
+        if not is_first_run:
+            if not self.authenticate():
+                print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Authentication failed. Exiting.\n")
+                sys.exit(1)
         
         # Download Adminotaur agent if not present
         if not self.adminotaur_agent_path.exists():
@@ -148,7 +150,64 @@ class DecyphertekCLI:
                 break
     
     def process_input(self, user_input):
-        print(f"{Colors.GREEN}[AI]{Colors.RESET} Processing: {user_input}")
+        """Process user input and route to appropriate handler"""
+        
+        # Handle slash commands
+        if user_input.startswith('/'):
+            command = user_input.split()[0].lower()
+            
+            if command == '/help':
+                self.show_help()
+            elif command == '/status':
+                self.show_status()
+            elif command == '/config':
+                self.show_config()
+            else:
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
+        else:
+            # Route to Adminotaur agent
+            print(f"{Colors.GREEN}[AI]{Colors.RESET} Processing: {user_input}")
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Adminotaur agent not yet implemented")
+    
+    def show_help(self):
+        """Show available commands"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}Available Commands:{Colors.RESET}\n")
+        print(f"{Colors.GREEN}/help{Colors.RESET}     - Show this help message")
+        print(f"{Colors.GREEN}/status{Colors.RESET}   - Show system status")
+        print(f"{Colors.GREEN}/config{Colors.RESET}   - Show configuration")
+        print(f"{Colors.GREEN}exit{Colors.RESET}      - Exit application\n")
+    
+    def show_status(self):
+        """Show system status"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}System Status:{Colors.RESET}\n")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Working directory: {self.app_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Credentials directory: {self.creds_dir}")
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Configs directory: {self.configs_dir}")
+        
+        # Check for encrypted credentials
+        if self.creds_dir.exists():
+            creds = list(self.creds_dir.glob("*.enc"))
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Stored credentials: {len(creds)}")
+            for cred in creds:
+                print(f"  - {cred.stem}")
+        print()
+    
+    def show_config(self):
+        """Show configuration"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}Configuration:{Colors.RESET}\n")
+        
+        if self.ai_config_path.exists():
+            try:
+                config = json.loads(self.ai_config_path.read_text())
+                print(f"{Colors.GREEN}AI Config:{Colors.RESET}")
+                print(f"  Default Provider: {config.get('default_provider', 'N/A')}")
+                print(f"  Providers: {', '.join(config.get('providers', {}).keys())}")
+            except:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load ai-config.json")
+        else:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} ai-config.json not found")
+        print()
     
     def first_run_setup(self):
         """First-run setup: create directories, password, SSH key"""
@@ -269,16 +328,39 @@ class DecyphertekCLI:
     def store_credential(self, service: str, credential: str):
         """Encrypt and store a credential"""
         try:
-            pub_key_path = self.ssh_key_path.with_suffix(".pub")
+            ssh_pub_key_path = self.ssh_key_path.with_suffix(".pub")
+            openssl_pub_key_path = self.keys_dir / "decyphertek.ai.pem"
             
+            # Check if SSH public key exists
+            if not ssh_pub_key_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} SSH public key not found: {ssh_pub_key_path}")
+                return False
+            
+            # Convert SSH public key to OpenSSL PEM format
+            convert_result = subprocess.run(
+                ["ssh-keygen", "-f", str(ssh_pub_key_path), "-e", "-m", "PKCS8"],
+                capture_output=True,
+                text=True
+            )
+            
+            if convert_result.returncode != 0:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to convert SSH key")
+                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} stderr: {convert_result.stderr}")
+                return False
+            
+            openssl_pub_key_path.write_text(convert_result.stdout)
+            
+            # Encrypt credential with OpenSSL public key
             result = subprocess.run(
-                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(pub_key_path)],
+                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(openssl_pub_key_path)],
                 input=credential.encode(),
-                capture_output=True
+                capture_output=True,
+                text=False
             )
             
             if result.returncode != 0:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Encryption failed: {result.stderr.decode()}")
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Encryption failed")
+                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} stderr: {result.stderr.decode()}")
                 return False
             
             cred_file = self.creds_dir / f"{service}.enc"
