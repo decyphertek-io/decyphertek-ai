@@ -1,6 +1,7 @@
 # Decyphertek-AI Architecture Plan
 
 ## Overview
+CURRENTLY IN DEV.......................................................................
 A modular Sysadmin AI CLI application built with a supervisor-worker agent architecture.
 
 ## Tech Stack
