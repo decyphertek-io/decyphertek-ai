@@ -328,7 +328,8 @@ class DecyphertekCLI:
     def store_credential(self, service: str, credential: str):
         """Encrypt and store a credential"""
         try:
-            ssh_pub_key_path = self.ssh_key_path.with_suffix(".pub")
+            # SSH key path is /path/to/decyphertek.ai, public key is /path/to/decyphertek.ai.pub
+            ssh_pub_key_path = Path(str(self.ssh_key_path) + ".pub")
             openssl_pub_key_path = self.keys_dir / "decyphertek.ai.pem"
             
             # Check if SSH public key exists
