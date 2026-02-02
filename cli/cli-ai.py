@@ -163,7 +163,7 @@ class DecyphertekCLI:
             
             # Complete slash commands
             if line.startswith('/'):
-                commands = ['/chat ', '/help', '/status', '/config']
+                commands = ['/chat ', '/help', '/status', '/config', '/health']
                 matches = [cmd for cmd in commands if cmd.startswith(line)]
                 if state < len(matches):
                     return matches[state]
@@ -212,6 +212,8 @@ class DecyphertekCLI:
                 self.show_status()
             elif command == '/config':
                 self.show_config()
+            elif command == '/health':
+                self.show_health()
             elif command == '/chat':
                 # Extract message after /chat
                 message = user_input[5:].strip()
@@ -302,8 +304,86 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/help{Colors.RESET}            - Show this help message")
         print(f"{Colors.GREEN}/status{Colors.RESET}          - Show system status")
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
+        print(f"{Colors.GREEN}/health{Colors.RESET}          - Check MCP Gateway and skill connectivity")
         print(f"{Colors.GREEN}exit{Colors.RESET}             - Exit application")
         print(f"\n{Colors.CYAN}Note:{Colors.RESET} Regular commands are executed as shell commands\n")
+    
+    def show_health(self):
+        """Check MCP Gateway and skill connectivity"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Health Check:{Colors.RESET}\n")
+        
+        # Test Adminotaur agent
+        print(f"{Colors.CYAN}Testing Adminotaur Agent:{Colors.RESET}")
+        adminotaur_path = self.app_dir / "agent-store" / "adminotaur" / "adminotaur.agent"
+        if adminotaur_path.exists():
+            try:
+                result = subprocess.run(
+                    [str(adminotaur_path), "/status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Adminotaur agent is callable")
+                else:
+                    print(f"{Colors.RED}[✗]{Colors.RESET} Adminotaur agent failed")
+                    print(f"    Error: {result.stderr[:100]}")
+            except Exception as e:
+                print(f"{Colors.RED}[✗]{Colors.RESET} Adminotaur agent error: {str(e)}")
+        else:
+            print(f"{Colors.RED}[✗]{Colors.RESET} Adminotaur agent not found at {adminotaur_path}")
+        
+        # Test MCP Gateway connectivity
+        print(f"\n{Colors.CYAN}Testing MCP Gateway:{Colors.RESET}")
+        gateway_running = False
+        try:
+            import urllib.request
+            url = "http://localhost:9000/health"
+            req = urllib.request.Request(url, method='GET')
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.getcode() == 200:
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} MCP Gateway is running at localhost:9000")
+                    gateway_running = True
+                else:
+                    print(f"{Colors.YELLOW}[⚠]{Colors.RESET} MCP Gateway responded with status {response.getcode()}")
+        except Exception as e:
+            print(f"{Colors.RED}[✗]{Colors.RESET} MCP Gateway not reachable at localhost:9000")
+            print(f"    Error: {str(e)}")
+            print(f"    {Colors.YELLOW}Hint:{Colors.RESET} Start MCP Gateway with: mcp-gateway.py")
+        
+        # Test MCP skills if gateway is running
+        if gateway_running:
+            print(f"\n{Colors.CYAN}Testing MCP Skills:{Colors.RESET}")
+            mcp_store = self.app_dir / "mcp-store"
+            if mcp_store.exists():
+                skills = [item.name for item in mcp_store.iterdir() if item.is_dir()]
+                if skills:
+                    for skill in skills:
+                        try:
+                            # Send dummy test request to each skill
+                            test_request = {
+                                "skill": skill,
+                                "tool": "health" if skill == "mcp-gateway" else "test",
+                                "params": {}
+                            }
+                            url = "http://localhost:9000/invoke"
+                            req = urllib.request.Request(
+                                url,
+                                data=json.dumps(test_request).encode('utf-8'),
+                                headers={'Content-Type': 'application/json'}
+                            )
+                            with urllib.request.urlopen(req, timeout=10) as response:
+                                result = json.loads(response.read().decode('utf-8'))
+                                # Check if we got any response (even error is OK for connectivity test)
+                                print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill}: Reachable")
+                        except Exception as e:
+                            print(f"{Colors.RED}[✗]{Colors.RESET} {skill}: {str(e)[:60]}")
+                else:
+                    print(f"  {Colors.YELLOW}No skills found in mcp-store{Colors.RESET}")
+            else:
+                print(f"  {Colors.RED}MCP store directory not found{Colors.RESET}")
+        
+        print()
     
     def show_status(self):
         """Show system status"""
