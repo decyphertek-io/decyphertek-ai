@@ -167,8 +167,32 @@ class DecyphertekCLI:
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
         else:
             # Route to Adminotaur agent
-            print(f"{Colors.GREEN}[AI]{Colors.RESET} Processing: {user_input}")
-            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Adminotaur agent not yet implemented")
+            self.call_adminotaur(user_input)
+    
+    def call_adminotaur(self, user_input):
+        """Call Adminotaur agent with user input"""
+        try:
+            if not self.adminotaur_agent_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur agent not found. Downloading...")
+                self.download_adminotaur()
+            
+            # Call Adminotaur agent executable with user input
+            result = subprocess.run(
+                [str(self.adminotaur_agent_path), user_input],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                print(f"{Colors.GREEN}[AI]{Colors.RESET} {result.stdout}")
+            else:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur failed: {result.stderr}")
+        
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur timed out")
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to call Adminotaur: {e}")
     
     def show_help(self):
         """Show available commands"""
