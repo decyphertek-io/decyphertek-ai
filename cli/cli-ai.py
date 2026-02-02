@@ -136,9 +136,9 @@ class DecyphertekCLI:
         
         while True:
             try:
-                # Show current directory in prompt
-                display_dir = self.current_dir.replace(str(self.home_dir), '~')
-                user_input = input(f"{Colors.GREEN}decyphertek.ai{Colors.RESET}:{Colors.BLUE}{display_dir}{Colors.RESET}$ ").strip()
+                # Wrap color codes in readline escape sequences so they don't break display
+                prompt = f"\001{Colors.CYAN}\002┌─[\001{Colors.GREEN}\002decyphertek.ai\001{Colors.CYAN}\002]\n└──▸\001{Colors.RESET}\002 "
+                user_input = input(prompt).strip()
                 
                 if user_input.lower() in ['exit', 'quit']:
                     print(f"\n{Colors.BLUE}[SYSTEM]{Colors.RESET} Exiting Decyphertek.ai\n")
