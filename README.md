@@ -1,6 +1,6 @@
 # DecypherTek AI
 
-THIS IS IN DEV: WORKING ON RE-ARCHITECTING TO BE SIMPLE & MODULAR VIA CLI.
+THIS IS IN DEV: WORKING ON RE-ARCHITECTING TO BE SIMPLE & MODULAR VIA CLI. TO ALSO INCLUDE SOURCE CODE. 
 Linux based decyphertek.ai chat. Modular stores: mcp ; agent ; app , to customize AI . 
 
 ## Features
