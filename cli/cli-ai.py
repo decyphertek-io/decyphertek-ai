@@ -286,7 +286,7 @@ class DecyphertekCLI:
             try:
                 cred_file = self.creds_dir / "openrouter.enc"
                 if cred_file.exists():
-                    encrypted_key = cred_file.read_text().strip()
+                    encrypted_key = cred_file.read_bytes()
                     decrypted_key = self.decrypt_credential(encrypted_key)
                     env['OPENROUTER_API_KEY'] = decrypted_key
             except Exception as e:
@@ -352,7 +352,7 @@ class DecyphertekCLI:
         try:
             cred_file = self.creds_dir / "openrouter.enc"
             if cred_file.exists():
-                encrypted_key = cred_file.read_text().strip()
+                encrypted_key = cred_file.read_bytes()
                 decrypted_key = self.decrypt_credential(encrypted_key)
                 if decrypted_key and len(decrypted_key) > 0:
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key decrypted successfully")
@@ -848,7 +848,12 @@ class DecyphertekCLI:
                 backend=default_backend()
             )
         
-        encrypted_bytes = base64.b64decode(encrypted_credential)
+        # Handle both bytes and base64 string input
+        if isinstance(encrypted_credential, str):
+            encrypted_bytes = base64.b64decode(encrypted_credential)
+        else:
+            encrypted_bytes = encrypted_credential
+            
         decrypted = private_key.decrypt(
             encrypted_bytes,
             padding.OAEP(

@@ -1,4 +1,5 @@
 
+
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
 ║                  D E C Y P H E R T E K . A I                  ║
@@ -11,62 +12,56 @@
 
 
 
-=== DECYPHERTEK.AI LOGIN ===
+[SYSTEM] First run detected. Setting up Decyphertek AI...
 
-[LOGIN] Enter password: 
-[✓] Authentication successful
+[✓] Created working directory: /home/adminotaur/.decyphertek.ai
+[✓] Created credentials directory: /home/adminotaur/.decyphertek.ai/creds
+[✓] Created configs directory: /home/adminotaur/.decyphertek.ai/configs
+[✓] Created agent store directory: /home/adminotaur/.decyphertek.ai/agent-store
+[✓] Created MCP store directory: /home/adminotaur/.decyphertek.ai/mcp-store
+[✓] Created app store directory: /home/adminotaur/.decyphertek.ai/app-store
+[✓] Created keys directory: /home/adminotaur/.decyphertek.ai/keys
+
+[SETUP] Downloading configuration files...
+[✓] Downloaded ai-config.json
+[✓] Downloaded slash-commands.json
+
+[SETUP] Set a master password to protect the application:
+Enter password: 
+Confirm password: 
+[✓] Password set successfully
+
+[SETUP] Generating SSH key for credential encryption...
+[✓] SSH key generated: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai
+[✓] Public key: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai.pub
 
 
 [SYSTEM] Downloading enabled agents, skills, and apps...
 
 [✓] Downloaded agent: adminotaur
-[✓] Downloaded skill: mcp-gateway
-[✓] Downloaded skill: openrouter-ai
 [✓] Downloaded skill: rag-chat
 [✓] Downloaded skill: web-search
 [✓] Downloaded app: chromadb
-decyphertek.ai:~$ /help
 
-Available Commands:
+[SETUP] OpenRouter AI is enabled but no API key found.
+[SETUP] Please enter your API key to continue.
 
-/chat <message>  - Chat with AI assistant
-/help            - Show this help message
-/status          - Show system status
-/config          - Show configuration
-exit             - Exit application
+Enter OpenRouter AI API key: 
+[✓] API key stored and encrypted
 
-Note: Regular commands are executed as shell commands
+decyphertek.ai:~$ /health
 
-decyphertek.ai:~$ /chat hello how are you doing?
-[ERROR] Adminotaur failed: Traceback (most recent call last):
-  File "adminotaur.py", line 15, in <module>
-ImportError: cannot import name 'AgentExecutor' from 'langchain.agents' (/tmp/_MEIitg4pF/langchain/agents/__init__.py)
-[PYI-74446:ERROR] Failed to execute script 'adminotaur' due to unhandled exception!
+System Health Check:
 
-decyphertek.ai:~$ cd Docu
-[ERROR] cd: /home/adminotaur/Docu: No such file or directory
-decyphertek.ai:~$ /status
+Testing Adminotaur Agent:
+[✓] Adminotaur agent is callable
 
-System Status:
+Testing OpenRouter Credentials:
+[✗] Failed to decrypt API key: 'utf-8' codec can't decode byte 0xfb in position 1: invalid start byte
 
-[✓] Working directory: /home/adminotaur/.decyphertek.ai
-[✓] Credentials directory: /home/adminotaur/.decyphertek.ai/creds
-[✓] Configs directory: /home/adminotaur/.decyphertek.ai/configs
-[✓] Stored credentials: 1
-  - openrouter
-
-decyphertek.ai:~$ exit
-
-[SYSTEM] Exiting Decyphertek.ai
+Testing MCP Skills:
+[✓] rag-chat: Executable found
+[✓] web-search: Executable found
 
 
-
-Refactor Adminotaur to use LangGraph StateGraph with supervisor pattern
-
-Define @tool functions that call MCP Gateway for skill invocation
-
-Update README.md to explain LangGraph architecture
-
-Rebuild Adminotaur agent
-
-Test with CLI /chat command
+decyphertek.ai:~$ 
