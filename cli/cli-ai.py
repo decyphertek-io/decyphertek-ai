@@ -234,18 +234,31 @@ class DecyphertekCLI:
             else:
                 # Check if it's an MCP skill command from slash-commands.json
                 try:
+                    print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Checking MCP command: {command}")
+                    print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Path exists: {self.slash_commands_path.exists()}")
+                    
                     if self.slash_commands_path.exists():
                         slash_config = json.loads(self.slash_commands_path.read_text())
                         commands = slash_config.get("commands", {})
+                        print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Commands loaded: {list(commands.keys())}")
                         
                         if command in commands:
                             cmd_config = commands[command]
+                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Command config: {cmd_config}")
+                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Has mcp_skill: {'mcp_skill' in cmd_config}")
+                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Is enabled: {cmd_config.get('enabled', True)}")
+                            
                             if cmd_config.get("enabled", True) and "mcp_skill" in cmd_config:
+                                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Routing to Adminotaur")
                                 # Route MCP skill command to Adminotaur
                                 self.call_adminotaur(user_input)
                                 return
+                        else:
+                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Command not found in slash-commands.json")
                 except Exception as e:
-                    pass
+                    print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Exception in MCP routing: {e}")
+                    import traceback
+                    traceback.print_exc()
                 
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
