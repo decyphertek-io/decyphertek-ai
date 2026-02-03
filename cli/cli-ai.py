@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import yaml
 import hashlib
 import getpass
 import argparse
@@ -54,17 +55,17 @@ class DecyphertekCLI:
         
         # Configs directory in user home
         self.configs_dir = self.app_dir / "configs"
-        self.ai_config_path = self.configs_dir / "ai-config.json"
-        self.slash_commands_path = self.configs_dir / "slash-commands.json"
+        self.ai_config_path = self.configs_dir / "ai-config.yaml"
+        self.slash_commands_path = self.configs_dir / "slash-commands.yaml"
         
         # Registry URLs
-        self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.json"
-        self.skills_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.json"
+        self.workers_registry_url = "https://raw.githubusercontent.com/decyphertek-io/agent-store/main/workers.yaml"
+        self.skills_registry_url = "https://raw.githubusercontent.com/decyphertek-io/mcp-store/main/skills.yaml"
         self.configs_base_url = "https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/cli/configs/"
         
         # Registry paths
-        self.workers_registry_path = self.agent_store_dir / "workers.json"
-        self.skills_registry_path = self.mcp_store_dir / "skills.json"
+        self.workers_registry_path = self.agent_store_dir / "workers.yaml"
+        self.skills_registry_path = self.mcp_store_dir / "skills.yaml"
         
         # Adminotaur paths
         self.adminotaur_dir = self.agent_store_dir / "adminotaur"
@@ -232,29 +233,17 @@ class DecyphertekCLI:
                     print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
                 return
             else:
-                # Check if it's an MCP skill command from slash-commands.json
+                # Check if it's an MCP skill command from slash-commands.yaml
                 try:
-                    print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Checking MCP command: {command}")
-                    print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Path exists: {self.slash_commands_path.exists()}")
-                    
                     if self.slash_commands_path.exists():
-                        slash_config = json.loads(self.slash_commands_path.read_text())
+                        slash_config = yaml.safe_load(self.slash_commands_path.read_text())
                         commands = slash_config.get("commands", {})
-                        print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Commands loaded: {list(commands.keys())}")
                         
                         if command in commands:
                             cmd_config = commands[command]
-                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Command config: {cmd_config}")
-                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Has mcp_skill: {'mcp_skill' in cmd_config}")
-                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Is enabled: {cmd_config.get('enabled', True)}")
-                            
                             if cmd_config.get("enabled", True) and "mcp_skill" in cmd_config:
-                                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Routing to Adminotaur")
-                                # Route MCP skill command to Adminotaur
                                 self.call_adminotaur(user_input)
                                 return
-                        else:
-                            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Command not found in slash-commands.json")
                 except Exception as e:
                     print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Exception in MCP routing: {e}")
                     import traceback
@@ -326,13 +315,19 @@ class DecyphertekCLI:
             # Prepare environment with decrypted API keys
             env = os.environ.copy()
             
-            # Decrypt and add API keys based on skill requirements
-            if skill_name == "worldnewsapi":
-                worldnews_cred = self.creds_dir / "worldnews.enc"
-                if worldnews_cred.exists():
-                    decrypted_key = self.decrypt_credential("worldnews")
-                    if decrypted_key:
-                        env["WORLDNEWS_API_KEY"] = decrypted_key
+            # Dynamically decrypt MCP skill credentials from skills.yaml
+            if self.skills_registry_path.exists():
+                skills_config = yaml.safe_load(self.skills_registry_path.read_text())
+                skill_info = skills_config.get("skills", {}).get(skill_name, {})
+                credential = skill_info.get("credentials")
+                env_var = skill_info.get("env_mapping")
+                
+                if credential:
+                    cred_file = self.creds_dir / f"{credential}.enc"
+                    if cred_file.exists():
+                        decrypted_key = self.decrypt_credential(credential)
+                        if decrypted_key and env_var:
+                            env[env_var] = decrypted_key
             
             # Start MCP server process
             process = subprocess.Popen(
@@ -352,6 +347,7 @@ class DecyphertekCLI:
     
     def call_adminotaur(self, user_input):
         """Call Adminotaur agent with user input"""
+        mcp_process = None
         try:
             adminotaur_path = self.agent_store_dir / "adminotaur" / "adminotaur.agent"
             
@@ -359,44 +355,52 @@ class DecyphertekCLI:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur agent not found at {adminotaur_path}")
                 return
             
-            # Decrypt API keys and pass via environment
             env = os.environ.copy()
             
-            # Decrypt OpenRouter API key if exists
-            openrouter_cred = self.creds_dir / "openrouter.enc"
-            if openrouter_cred.exists():
-                decrypted_key = self.decrypt_credential("openrouter")
-                if decrypted_key:
-                    env["OPENROUTER_API_KEY"] = decrypted_key
-            
-            # Decrypt World News API key if exists
-            worldnews_cred = self.creds_dir / "worldnews.enc"
-            if worldnews_cred.exists():
-                decrypted_key = self.decrypt_credential("worldnews")
-                if decrypted_key:
-                    env["WORLDNEWS_API_KEY"] = decrypted_key
+            # Dynamically decrypt agent credentials from workers.yaml
+            if self.workers_registry_path.exists():
+                workers_config = yaml.safe_load(self.workers_registry_path.read_text())
+                agent_info = workers_config.get("agents", {}).get("adminotaur", {})
+                credential = agent_info.get("credentials")
+                env_var = agent_info.get("env_mapping")
+                
+                if credential:
+                    cred_file = self.creds_dir / f"{credential}.enc"
+                    if cred_file.exists():
+                        decrypted_key = self.decrypt_credential(credential)
+                        if decrypted_key and env_var:
+                            env[env_var] = decrypted_key
             
             # Check if this is an MCP skill command and start server if needed
-            mcp_process = None
             if user_input.startswith('/'):
                 command = user_input.split()[0].lower()
-                try:
-                    if self.slash_commands_path.exists():
-                        slash_config = json.loads(self.slash_commands_path.read_text())
-                        commands = slash_config.get("commands", {})
-                        
-                        if command in commands:
-                            cmd_config = commands[command]
-                            skill_name = cmd_config.get("mcp_skill")
-                            if skill_name:
-                                # Start MCP server on-demand
-                                mcp_process = self.start_mcp_server(skill_name)
-                                if mcp_process:
-                                    # Pass MCP server info to Adminotaur via environment
-                                    env["MCP_SERVER_PID"] = str(mcp_process.pid)
-                                    env["MCP_SKILL_NAME"] = skill_name
-                except Exception as e:
-                    pass
+                if self.slash_commands_path.exists():
+                    slash_config = yaml.safe_load(self.slash_commands_path.read_text())
+                    commands = slash_config.get("commands", {})
+                    
+                    if command in commands:
+                        cmd_config = commands[command]
+                        skill_name = cmd_config.get("mcp_skill")
+                        if skill_name:
+                            # Dynamically decrypt MCP skill credentials from skills.yaml
+                            if self.skills_registry_path.exists():
+                                skills_config = yaml.safe_load(self.skills_registry_path.read_text())
+                                skill_info = skills_config.get("skills", {}).get(skill_name, {})
+                                credential = skill_info.get("credentials")
+                                env_var = skill_info.get("env_mapping")
+                                
+                                if credential:
+                                    cred_file = self.creds_dir / f"{credential}.enc"
+                                    if cred_file.exists():
+                                        decrypted_key = self.decrypt_credential(credential)
+                                        if decrypted_key and env_var:
+                                            env[env_var] = decrypted_key
+                            
+                            # Start MCP server on-demand
+                            mcp_process = self.start_mcp_server(skill_name)
+                            if mcp_process:
+                                env["MCP_SERVER_PID"] = str(mcp_process.pid)
+                                env["MCP_SKILL_NAME"] = skill_name
             
             # Call Adminotaur with user input
             result = subprocess.run(
@@ -445,10 +449,10 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/health{Colors.RESET}          - Check system health and connectivity")
         print(f"{Colors.GREEN}/settings{Colors.RESET}        - Interactive settings menu")
         
-        # Dynamically load MCP slash commands from slash-commands.json
+        # Dynamically load MCP slash commands from slash-commands.yaml
         try:
             if self.slash_commands_path.exists():
-                slash_config = json.loads(self.slash_commands_path.read_text())
+                slash_config = yaml.safe_load(self.slash_commands_path.read_text())
                 commands = slash_config.get("commands", {})
                 
                 # Filter for MCP skill commands only (not builtin)
@@ -492,12 +496,12 @@ class DecyphertekCLI:
     def _manage_mcp_skills(self):
         """Enable/disable MCP skills"""
         try:
-            skills_registry_path = self.mcp_store_dir / "skills.json"
+            skills_registry_path = self.mcp_store_dir / "skills.yaml"
             if not skills_registry_path.exists():
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} skills.json not found")
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} skills.yaml not found")
                 return
             
-            skills_data = json.loads(skills_registry_path.read_text())
+            skills_data = yaml.safe_load(skills_registry_path.read_text())
             skills = skills_data.get("skills", {})
             
             print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Skills:{Colors.RESET}\n")
@@ -570,12 +574,12 @@ class DecyphertekCLI:
     def _change_model(self):
         """Change OpenRouter model"""
         try:
-            ai_config_path = self.configs_dir / "ai-config.json"
+            ai_config_path = self.configs_dir / "ai-config.yaml"
             if not ai_config_path.exists():
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} ai-config.json not found")
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} ai-config.yaml not found")
                 return
             
-            ai_config = json.loads(ai_config_path.read_text())
+            ai_config = yaml.safe_load(ai_config_path.read_text())
             current_model = ai_config.get("providers", {}).get("openrouter-ai", {}).get("default_model", "")
             
             print(f"\n{Colors.CYAN}{Colors.BOLD}Change OpenRouter Model:{Colors.RESET}\n")
@@ -698,14 +702,14 @@ class DecyphertekCLI:
         
         if self.ai_config_path.exists():
             try:
-                config = json.loads(self.ai_config_path.read_text())
+                config = yaml.safe_load(self.ai_config_path.read_text())
                 print(f"{Colors.GREEN}AI Config:{Colors.RESET}")
                 print(f"  Default Provider: {config.get('default_provider', 'N/A')}")
                 print(f"  Providers: {', '.join(config.get('providers', {}).keys())}")
             except:
-                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load ai-config.json")
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load ai-config.yaml")
         else:
-            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} ai-config.json not found")
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} ai-config.yaml not found")
         print()
     
     def first_run_setup(self):
@@ -804,12 +808,12 @@ class DecyphertekCLI:
         return False
     
     def check_credentials(self):
-        """Check ai-config.json and prompt for missing credentials"""
+        """Check ai-config.yaml and prompt for missing credentials"""
         if not self.ai_config_path.exists():
             return
         
         try:
-            ai_config = json.loads(self.ai_config_path.read_text())
+            ai_config = yaml.safe_load(self.ai_config_path.read_text())
             providers = ai_config.get("providers", {})
             
             for provider_id, provider_config in providers.items():
@@ -872,7 +876,7 @@ class DecyphertekCLI:
     
     def download_configs(self):
         """Download config files from GitHub"""
-        config_files = ["ai-config.json", "slash-commands.json"]
+        config_files = ["ai-config.yaml", "slash-commands.yaml"]
         
         for config_file in config_files:
             try:
@@ -885,7 +889,7 @@ class DecyphertekCLI:
                 print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {config_file}: {e}")
     
     def download_workers_registry(self):
-        """Download workers.json registry from agent-store"""
+        """Download workers.yaml registry from agent-store"""
         try:
             with urllib.request.urlopen(self.workers_registry_url) as response:
                 registry_data = response.read()
@@ -896,7 +900,7 @@ class DecyphertekCLI:
             return False
     
     def download_skills_registry(self):
-        """Download skills.json registry from mcp-store"""
+        """Download skills.yaml registry from mcp-store"""
         try:
             with urllib.request.urlopen(self.skills_registry_url) as response:
                 registry_data = response.read()
@@ -922,9 +926,9 @@ class DecyphertekCLI:
         self.download_enabled_apps()
     
     def download_enabled_agents(self):
-        """Download all enabled agents from workers.json"""
+        """Download all enabled agents from workers.yaml"""
         try:
-            registry = json.loads(self.workers_registry_path.read_text())
+            registry = yaml.safe_load(self.workers_registry_path.read_text())
             agents = registry.get("agents", {})
             
             for agent_id, agent_config in agents.items():
@@ -936,40 +940,30 @@ class DecyphertekCLI:
                 
                 repo_url = agent_config.get("repo_url", "")
                 folder_path = agent_config.get("folder_path", "")
-                files = agent_config.get("files", {})
+                executable = agent_config.get("executable", "")
                 
-                if not repo_url or not folder_path:
+                if not repo_url or not folder_path or not executable:
                     continue
                 
                 raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
                 
                 # Download agent executable
-                if "agent" in files:
-                    agent_path = agent_dir / files["agent"].split("/")[-1]
-                    try:
-                        with urllib.request.urlopen(raw_base + files["agent"]) as response:
-                            agent_path.write_bytes(response.read())
-                            agent_path.chmod(0o755)
-                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
-                    except Exception as e:
-                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {agent_id}: {e}")
-                
-                # Download docs
-                if "docs" in files:
-                    docs_path = agent_dir / files["docs"].split("/")[-1]
-                    try:
-                        with urllib.request.urlopen(raw_base + files["docs"]) as response:
-                            docs_path.write_bytes(response.read())
-                    except:
-                        pass
+                agent_path = agent_dir / executable.split("/")[-1]
+                try:
+                    with urllib.request.urlopen(raw_base + executable) as response:
+                        agent_path.write_bytes(response.read())
+                        agent_path.chmod(0o755)
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
+                except Exception as e:
+                    print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {agent_id}: {e}")
         
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading agents: {e}")
     
     def download_enabled_skills(self):
-        """Download all enabled MCP skills from skills.json"""
+        """Download all enabled MCP skills from skills.yaml"""
         try:
-            registry = json.loads(self.skills_registry_path.read_text())
+            registry = yaml.safe_load(self.skills_registry_path.read_text())
             skills = registry.get("skills", {})
             
             for skill_id, skill_config in skills.items():
@@ -981,44 +975,33 @@ class DecyphertekCLI:
                 
                 repo_url = skill_config.get("repo_url", "")
                 folder_path = skill_config.get("folder_path", "")
-                files = skill_config.get("files", {})
+                executable = skill_config.get("executable", "")
                 
-                if not repo_url or not folder_path:
+                if not repo_url or not folder_path or not executable:
                     continue
                 
                 raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
                 
                 # Download skill executable
-                if "executable" in files:
-                    skill_path = skill_dir / files["executable"].split("/")[-1]
-                    try:
-                        with urllib.request.urlopen(raw_base + files["executable"]) as response:
-                            skill_path.write_bytes(response.read())
-                            skill_path.chmod(0o755)
-                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
-                    except Exception as e:
-                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {skill_id}: {e}")
-                
-                # Download config and docs
-                for file_type in ["config", "docs"]:
-                    if file_type in files:
-                        file_path = skill_dir / files[file_type].split("/")[-1]
-                        try:
-                            with urllib.request.urlopen(raw_base + files[file_type]) as response:
-                                file_path.write_bytes(response.read())
-                        except:
-                            pass
+                skill_path = skill_dir / executable.split("/")[-1]
+                try:
+                    with urllib.request.urlopen(raw_base + executable) as response:
+                        skill_path.write_bytes(response.read())
+                        skill_path.chmod(0o755)
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
+                except Exception as e:
+                    print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {skill_id}: {e}")
         
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading skills: {e}")
     
     def download_enabled_apps(self):
-        """Download all enabled apps from app.json"""
+        """Download all enabled apps from app.yaml"""
         try:
-            app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.json"
+            app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
             
             with urllib.request.urlopen(app_registry_url) as response:
-                registry = json.loads(response.read())
+                registry = yaml.safe_load(response.read())
             
             apps = registry.get("apps", {})
             
@@ -1031,55 +1014,58 @@ class DecyphertekCLI:
                 
                 repo_url = app_config.get("repo_url", "")
                 folder_path = app_config.get("folder_path", "")
-                files = app_config.get("files", {})
+                executable = app_config.get("executable", "")
+                config = app_config.get("config", "")
+                config_path = app_config.get("config_path", "")
                 
-                if not repo_url or not folder_path:
+                if not repo_url or not folder_path or not executable:
                     continue
                 
                 raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
                 
                 # Download app executable
-                if "executable" in files:
-                    app_path = app_dir / files["executable"].split("/")[-1]
-                    try:
-                        with urllib.request.urlopen(raw_base + files["executable"]) as response:
-                            app_path.write_bytes(response.read())
-                            app_path.chmod(0o755)
-                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
-                    except Exception as e:
-                        print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
+                app_path = app_dir / executable.split("/")[-1]
+                try:
+                    with urllib.request.urlopen(raw_base + executable) as response:
+                        app_path.write_bytes(response.read())
+                        app_path.chmod(0o755)
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
+                except Exception as e:
+                    print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
                 
-                # Download config and docs
-                for file_type in ["config", "docs"]:
-                    if file_type in files:
-                        file_path = app_dir / files[file_type].split("/")[-1]
-                        try:
-                            with urllib.request.urlopen(raw_base + files[file_type]) as response:
-                                file_path.write_bytes(response.read())
-                        except:
-                            pass
+                # Download config to configs directory if specified
+                if config and config_path:
+                    config_dir = Path(config_path.replace("~", str(Path.home())))
+                    config_dir.mkdir(parents=True, exist_ok=True)
+                    config_file_path = config_dir / config
+                    try:
+                        with urllib.request.urlopen(raw_base + config) as response:
+                            config_file_path.write_bytes(response.read())
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
+                    except:
+                        pass
         
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading apps: {e}")
     
     def download_adminotaur(self):
-        """Download Adminotaur agent using workers.json registry"""
+        """Download Adminotaur agent using workers.yaml registry"""
         print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading agent registry...")
         
-        # Download workers.json first
+        # Download workers.yaml first
         if not self.download_workers_registry():
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download workers registry")
             return
         
-        # Parse workers.json to get adminotaur config
+        # Parse workers.yaml to get adminotaur config
         try:
-            registry_data = json.loads(self.workers_registry_path.read_text())
+            registry_data = yaml.safe_load(self.workers_registry_path.read_text())
             adminotaur_config = registry_data.get("agents", {}).get("adminotaur", {})
             repo_url = adminotaur_config.get("repo_url", "")
             folder_path = adminotaur_config.get("folder_path", "")
-            files = adminotaur_config.get("files", {})
+            executable = adminotaur_config.get("executable", "")
             
-            if not repo_url or not folder_path or not files:
+            if not repo_url or not folder_path or not executable:
                 print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Invalid registry format")
                 return
             
@@ -1089,24 +1075,12 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
             
             # Download agent executable
-            if "agent" in files:
-                agent_url = raw_base + files["agent"]
-                with urllib.request.urlopen(agent_url) as response:
-                    agent_data = response.read()
-                    self.adminotaur_agent_path.write_bytes(agent_data)
-                    self.adminotaur_agent_path.chmod(0o755)  # Make executable
-                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {files['agent']}")
-            
-            # Download docs
-            if "docs" in files:
-                docs_url = raw_base + files["docs"]
-                try:
-                    with urllib.request.urlopen(docs_url) as response:
-                        docs_data = response.read()
-                        self.adminotaur_md_path.write_bytes(docs_data)
-                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {files['docs']}")
-                except Exception as e:
-                    print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not download {files['docs']}: {e}")
+            agent_url = raw_base + executable
+            with urllib.request.urlopen(agent_url) as response:
+                agent_data = response.read()
+                self.adminotaur_agent_path.write_bytes(agent_data)
+                self.adminotaur_agent_path.chmod(0o755)
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {executable}")
                 
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")

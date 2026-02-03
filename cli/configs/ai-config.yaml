@@ -1,0 +1,12 @@
+version: "1.0.0"
+description: "AI provider configuration for Adminotaur"
+
+providers:
+  openrouter-ai:
+    name: OpenRouter AI
+    base_url: https://openrouter.ai/api/v1
+    default_model: deepseek/deepseek-r1-0528:free
+    enabled: true
+    credential_service: openrouter
+
+default_provider: openrouter-ai
