@@ -19,6 +19,14 @@
       "requires_app": "chromadb",
       "enabled": true
     },
+    "/news": {
+      "name": "news",
+      "description": "Search and filter news articles with AI context",
+      "mcp_skill": "worldnewsapi",
+      "tools": ["search_news"],
+      "ai_provider": "openrouter-ai",
+      "enabled": true
+    },
     "/help": {
       "name": "help",
       "description": "Show available commands and system info",
