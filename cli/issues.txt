@@ -1,67 +1,61 @@
+decyphertek.ai:~$ /help
 
+Available Commands:
 
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║                  D E C Y P H E R T E K . A I                  ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
+/chat <message>  - Chat with AI assistant
+/help            - Show this help message
+/status          - Show system status
+/config          - Show configuration
+/health          - Check system health and connectivity
+/settings        - Interactive settings menu
 
-    ▸ SYSADMIN AI ASSISTANT v0.1.0
-    ▸ MODULAR AGENT/MCP ARCHITECTURE
-    ▸ TYPE '/chat <msg>' FOR AI | '/help' FOR COMMANDS | 'exit' TO QUIT
+MCP Skills:
 
+/news <query>  - Search and filter news articles with AI context
+/rag <query>  - Query ChromaDB vector database for context
+/web <query>  - Search the web and answer with context
 
+exit             - Exit application
 
-[SYSTEM] First run detected. Setting up Decyphertek AI...
+Note: Regular commands are executed as shell commands
 
-[✓] Created working directory: /home/adminotaur/.decyphertek.ai
-[✓] Created credentials directory: /home/adminotaur/.decyphertek.ai/creds
-[✓] Created configs directory: /home/adminotaur/.decyphertek.ai/configs
-[✓] Created agent store directory: /home/adminotaur/.decyphertek.ai/agent-store
-[✓] Created MCP store directory: /home/adminotaur/.decyphertek.ai/mcp-store
-[✓] Created app store directory: /home/adminotaur/.decyphertek.ai/app-store
-[✓] Created keys directory: /home/adminotaur/.decyphertek.ai/keys
+decyphertek.ai:~$ /settings
 
-[SETUP] Downloading configuration files...
-[✓] Downloaded ai-config.json
-[✓] Downloaded slash-commands.json
+Settings Menu:
 
-[SETUP] Set a master password to protect the application:
-Enter password: 
-Confirm password: 
-[✓] Password set successfully
+1. Manage MCP Skills (enable/disable)
+2. Manage API Keys
+3. Change OpenRouter Model
+4. Back to main
 
-[SETUP] Generating SSH key for credential encryption...
-[✓] SSH key generated: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai
-[✓] Public key: /home/adminotaur/.decyphertek.ai/keys/decyphertek.ai.pub
+Select option (1-4): 2
 
+API Key Management:
 
-[SYSTEM] Downloading enabled agents, skills, and apps...
+1. Add/Update OpenRouter API Key
+2. Add/Update World News API Key
+3. View stored credentials
+4. Back
 
-[✓] Downloaded agent: adminotaur
-[✓] Downloaded skill: rag-chat
-[✓] Downloaded skill: web-search
-[✓] Downloaded app: chromadb
+Select option (1-4): 2
 
-[SETUP] OpenRouter AI is enabled but no API key found.
-[SETUP] Please enter your API key to continue.
+Enter World News API key: [✓] World News API key stored
 
-Enter OpenRouter AI API key: 
-[✓] API key stored and encrypted
+Settings Menu:
 
-decyphertek.ai:~$ /health
+1. Manage MCP Skills (enable/disable)
+2. Manage API Keys
+3. Change OpenRouter Model
+4. Back to main
 
-System Health Check:
-
-Testing Adminotaur Agent:
-[✓] Adminotaur agent is callable
-
-Testing OpenRouter Credentials:
-[✗] Failed to decrypt API key: 'utf-8' codec can't decode byte 0xfb in position 1: invalid start byte
-
-Testing MCP Skills:
-[✓] rag-chat: Executable found
-[✓] web-search: Executable found
-
-
+Select option (1-4): 4
+decyphertek.ai:~$ /news Tell me about the top news stories today. 
+[SYSTEM] Unknown command: /news
+[SYSTEM] Type /help for available commands
+decyphertek.ai:~$ /web What is the weather today in New York City?
+[SYSTEM] Unknown command: /web
+[SYSTEM] Type /help for available commands
+decyphertek.ai:~$ /rag can you read any documents?
+[SYSTEM] Unknown command: /rag
+[SYSTEM] Type /help for available commands
 decyphertek.ai:~$ 
