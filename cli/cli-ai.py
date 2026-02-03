@@ -49,7 +49,7 @@ class DecyphertekCLI:
         self.mcp_store_dir = self.app_dir / "mcp-store"
         self.app_store_dir = self.app_dir / "app-store"
         self.keys_dir = self.app_dir / "keys"
-        self.ssh_key_path = self.keys_dir / "decyphertek.pem"
+        self.ssh_key_path = self.keys_dir / "decyphertek.ai.pem"
         self.password_file = self.app_dir / ".password_hash"
         
         # Configs directory in user home
@@ -206,65 +206,46 @@ class DecyphertekCLI:
         
         # Handle slash commands
         if user_input.startswith('/'):
-            parts = user_input.split(None, 1)
-            command = parts[0].lower()
-            args = parts[1] if len(parts) > 1 else ""
+            command = user_input.split()[0].lower()
             
-            # Load slash commands from config
-            try:
-                if not self.slash_commands_path.exists():
-                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} slash-commands.json not found")
-                    return
-                
-                slash_config = json.loads(self.slash_commands_path.read_text())
-                commands = slash_config.get("commands", {})
-                
-                if command not in commands:
-                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
-                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
-                    return
-                
-                cmd_config = commands[command]
-                
-                # Check if command is enabled
-                if not cmd_config.get("enabled", True):
-                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command {command} is disabled")
-                    return
-                
-                # Route builtin commands
-                if cmd_config.get("builtin"):
-                    self._handle_builtin_command(command, args)
-                # Route MCP skill commands to Adminotaur
-                elif "mcp_skill" in cmd_config:
-                    self.call_adminotaur(user_input)
+            if command == '/help':
+                self.show_help()
+            elif command == '/status':
+                self.show_status()
+            elif command == '/config':
+                self.show_config()
+            elif command == '/health':
+                self.show_health()
+            elif command == '/settings':
+                self.show_settings()
+            elif command == '/chat':
+                # Extract message after /chat
+                message = user_input[5:].strip()
+                if message:
+                    self.call_adminotaur(message)
                 else:
-                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command {command} not properly configured")
-            
-            except Exception as e:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to process command: {e}")
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
+            else:
+                # Check if it's an MCP skill command from slash-commands.json
+                try:
+                    if self.slash_commands_path.exists():
+                        slash_config = json.loads(self.slash_commands_path.read_text())
+                        commands = slash_config.get("commands", {})
+                        
+                        if command in commands:
+                            cmd_config = commands[command]
+                            if cmd_config.get("enabled", True) and "mcp_skill" in cmd_config:
+                                # Route MCP skill command to Adminotaur
+                                self.call_adminotaur(user_input)
+                                return
+                except Exception as e:
+                    pass
+                
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
         else:
             # Execute as Linux shell command
             self.execute_shell_command(user_input)
-    
-    def _handle_builtin_command(self, command: str, args: str):
-        """Handle builtin slash commands"""
-        if command == '/help':
-            self.show_help()
-        elif command == '/status':
-            self.show_status()
-        elif command == '/config':
-            self.show_config()
-        elif command == '/health':
-            self.show_health()
-        elif command == '/settings':
-            self.show_settings()
-        elif command == '/chat':
-            if args:
-                self.call_adminotaur(args)
-            else:
-                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
-        else:
-            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Unknown builtin command: {command}")
     
     def execute_shell_command(self, command):
         """Execute a shell command and display output"""
@@ -368,7 +349,8 @@ class DecyphertekCLI:
             print(f"{Colors.GREEN}3.{Colors.RESET} Change OpenRouter Model")
             print(f"{Colors.GREEN}4.{Colors.RESET} Back to main")
             
-            choice = input(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET} ").strip()
+            print(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET}", end=" ")
+            choice = input().strip()
             
             if choice == '1':
                 self._manage_mcp_skills()
@@ -430,17 +412,20 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}3.{Colors.RESET} View stored credentials")
         print(f"{Colors.GREEN}4.{Colors.RESET} Back")
         
-        choice = input(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET} ").strip()
+        print(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET}", end=" ")
+        choice = input().strip()
         
         if choice == '1':
-            api_key = input(f"{Colors.CYAN}Enter OpenRouter API key:{Colors.RESET} ").strip()
+            print(f"{Colors.CYAN}Enter OpenRouter API key:{Colors.RESET}", end=" ")
+            api_key = getpass.getpass("")
             if api_key:
                 if self.store_credential("openrouter", api_key):
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key stored")
                 else:
                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store API key")
         elif choice == '2':
-            api_key = input(f"{Colors.CYAN}Enter World News API key:{Colors.RESET} ").strip()
+            print(f"{Colors.CYAN}Enter World News API key:{Colors.RESET}", end=" ")
+            api_key = getpass.getpass("")
             if api_key:
                 if self.store_credential("worldnews", api_key):
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} World News API key stored")
@@ -477,7 +462,8 @@ class DecyphertekCLI:
             print(f"5. meta-llama/llama-3.1-70b-instruct")
             print(f"6. Custom model")
             
-            choice = input(f"\n{Colors.CYAN}Select option (1-6):{Colors.RESET} ").strip()
+            print(f"\n{Colors.CYAN}Select option (1-6):{Colors.RESET}", end=" ")
+            choice = input().strip()
             
             models = {
                 '1': 'anthropic/claude-3.5-sonnet',
@@ -490,7 +476,8 @@ class DecyphertekCLI:
             if choice in models:
                 new_model = models[choice]
             elif choice == '6':
-                new_model = input(f"{Colors.CYAN}Enter model name:{Colors.RESET} ").strip()
+                print(f"{Colors.CYAN}Enter model name:{Colors.RESET}", end=" ")
+                new_model = input().strip()
             else:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid option")
                 return
@@ -654,14 +641,15 @@ class DecyphertekCLI:
                     "openssl", "rsa",
                     "-in", str(self.ssh_key_path),
                     "-pubout",
-                    "-out", str(self.ssh_key_path).replace('.pem', '.pub')
+                    "-out", str(self.ssh_key_path).replace('.ai.pem', '.ai.pub')
                 ], check=True, capture_output=True)
                 
                 # Set permissions
                 self.ssh_key_path.chmod(0o600)
                 
+                pub_key_path = str(self.ssh_key_path).replace('.ai.pem', '.ai.pub')
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Private key: {self.ssh_key_path}")
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {self.ssh_key_path}.replace('.pem', '.pub')")
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {pub_key_path}")
                 print()
             except subprocess.CalledProcessError as e:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate RSA key: {e}")
@@ -727,7 +715,7 @@ class DecyphertekCLI:
         """Encrypt and store a credential"""
         try:
             # Public key path (decyphertek.pub)
-            pub_key_path = Path(str(self.ssh_key_path).replace('.pem', '.pub'))
+            pub_key_path = Path(str(self.ssh_key_path).replace('.ai.pem', '.ai.pub'))
             
             # Check if public key exists
             if not pub_key_path.exists():
