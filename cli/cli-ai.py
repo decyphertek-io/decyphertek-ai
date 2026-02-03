@@ -49,7 +49,7 @@ class DecyphertekCLI:
         self.mcp_store_dir = self.app_dir / "mcp-store"
         self.app_store_dir = self.app_dir / "app-store"
         self.keys_dir = self.app_dir / "keys"
-        self.ssh_key_path = self.keys_dir / "decyphertek.ai"
+        self.ssh_key_path = self.keys_dir / "decyphertek.pem"
         self.password_file = self.app_dir / ".password_hash"
         
         # Configs directory in user home
@@ -457,23 +457,33 @@ class DecyphertekCLI:
             else:
                 print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Passwords don't match. Try again.")
         
-        # Generate SSH key for credential encryption
-        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating SSH key for credential encryption...")
+        # Generate RSA key pair in PEM format for credential encryption
+        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating RSA key for credential encryption...")
         if not self.ssh_key_path.exists():
             try:
+                # Generate private key in PEM format
                 subprocess.run([
-                    "ssh-keygen",
-                    "-t", "rsa",
-                    "-b", "4096",
-                    "-f", str(self.ssh_key_path),
-                    "-N", "",
-                    "-C", "decyphertek.ai-credential-encryption"
+                    "openssl", "genrsa",
+                    "-out", str(self.ssh_key_path),
+                    "4096"
                 ], check=True, capture_output=True)
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} SSH key generated: {self.ssh_key_path}")
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {self.ssh_key_path}.pub")
+                
+                # Generate public key
+                subprocess.run([
+                    "openssl", "rsa",
+                    "-in", str(self.ssh_key_path),
+                    "-pubout",
+                    "-out", str(self.ssh_key_path).replace('.pem', '.pub')
+                ], check=True, capture_output=True)
+                
+                # Set permissions
+                self.ssh_key_path.chmod(0o600)
+                
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Private key: {self.ssh_key_path}")
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {self.ssh_key_path}.replace('.pem', '.pub')")
                 print()
             except subprocess.CalledProcessError as e:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate SSH key: {e}")
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate RSA key: {e}")
                 sys.exit(1)
         
         # Download all enabled agents, skills, and apps (only on first run)
@@ -535,32 +545,17 @@ class DecyphertekCLI:
     def store_credential(self, service: str, credential: str):
         """Encrypt and store a credential"""
         try:
-            # SSH key path is /path/to/decyphertek.ai, public key is /path/to/decyphertek.ai.pub
-            ssh_pub_key_path = Path(str(self.ssh_key_path) + ".pub")
-            openssl_pub_key_path = self.keys_dir / "decyphertek.ai.pem"
+            # Public key path (decyphertek.pub)
+            pub_key_path = Path(str(self.ssh_key_path).replace('.pem', '.pub'))
             
-            # Check if SSH public key exists
-            if not ssh_pub_key_path.exists():
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} SSH public key not found: {ssh_pub_key_path}")
+            # Check if public key exists
+            if not pub_key_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Public key not found: {pub_key_path}")
                 return False
-            
-            # Convert SSH public key to OpenSSL PEM format
-            convert_result = subprocess.run(
-                ["ssh-keygen", "-f", str(ssh_pub_key_path), "-e", "-m", "PKCS8"],
-                capture_output=True,
-                text=True
-            )
-            
-            if convert_result.returncode != 0:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to convert SSH key")
-                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} stderr: {convert_result.stderr}")
-                return False
-            
-            openssl_pub_key_path.write_text(convert_result.stdout)
             
             # Encrypt credential with OpenSSL public key
             result = subprocess.run(
-                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(openssl_pub_key_path)],
+                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(pub_key_path)],
                 input=credential.encode(),
                 capture_output=True,
                 text=False
