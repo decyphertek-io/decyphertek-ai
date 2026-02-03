@@ -281,12 +281,24 @@ class DecyphertekCLI:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur agent not found. Downloading...")
                 self.download_adminotaur()
             
+            # Decrypt OpenRouter API key and pass via environment variable
+            env = os.environ.copy()
+            try:
+                cred_file = self.creds_dir / "openrouter.enc"
+                if cred_file.exists():
+                    encrypted_key = cred_file.read_text().strip()
+                    decrypted_key = self.decrypt_credential(encrypted_key)
+                    env['OPENROUTER_API_KEY'] = decrypted_key
+            except Exception as e:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not decrypt API key: {e}")
+            
             # Call Adminotaur agent executable with user input
             result = subprocess.run(
                 [str(self.adminotaur_agent_path), user_input],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                env=env
             )
             
             if result.returncode == 0:
@@ -306,14 +318,14 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/help{Colors.RESET}            - Show this help message")
         print(f"{Colors.GREEN}/status{Colors.RESET}          - Show system status")
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
-        print(f"{Colors.GREEN}/health{Colors.RESET}          - Check MCP Gateway and skill connectivity")
+        print(f"{Colors.GREEN}/health{Colors.RESET}          - Check system health and connectivity")
         print(f"{Colors.GREEN}exit{Colors.RESET}             - Exit application")
         print(f"\n{Colors.CYAN}Note:{Colors.RESET} Regular commands are executed as shell commands\n")
     
     def show_health(self):
-        """Check MCP Gateway and skill connectivity"""
-        print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Health Check:{Colors.RESET}\n")
-        
+        """Check system health and connectivity"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}System Health Check:{Colors.RESET}\n")
+
         # Test Adminotaur agent
         print(f"{Colors.CYAN}Testing Adminotaur Agent:{Colors.RESET}")
         adminotaur_path = self.app_dir / "agent-store" / "adminotaur" / "adminotaur.agent"
@@ -334,57 +346,41 @@ class DecyphertekCLI:
                 print(f"{Colors.RED}[✗]{Colors.RESET} Adminotaur agent error: {str(e)}")
         else:
             print(f"{Colors.RED}[✗]{Colors.RESET} Adminotaur agent not found at {adminotaur_path}")
-        
-        # Test MCP Gateway connectivity
-        print(f"\n{Colors.CYAN}Testing MCP Gateway:{Colors.RESET}")
-        gateway_running = False
+
+        # Test OpenRouter API key decryption
+        print(f"\n{Colors.CYAN}Testing OpenRouter Credentials:{Colors.RESET}")
         try:
-            import urllib.request
-            url = "http://localhost:9000/health"
-            req = urllib.request.Request(url, method='GET')
-            with urllib.request.urlopen(req, timeout=5) as response:
-                if response.getcode() == 200:
-                    print(f"{Colors.GREEN}[✓]{Colors.RESET} MCP Gateway is running at localhost:9000")
-                    gateway_running = True
+            cred_file = self.creds_dir / "openrouter.enc"
+            if cred_file.exists():
+                encrypted_key = cred_file.read_text().strip()
+                decrypted_key = self.decrypt_credential(encrypted_key)
+                if decrypted_key and len(decrypted_key) > 0:
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key decrypted successfully")
                 else:
-                    print(f"{Colors.YELLOW}[⚠]{Colors.RESET} MCP Gateway responded with status {response.getcode()}")
-        except Exception as e:
-            print(f"{Colors.RED}[✗]{Colors.RESET} MCP Gateway not reachable at localhost:9000")
-            print(f"    Error: {str(e)}")
-            print(f"    {Colors.YELLOW}Note:{Colors.RESET} Adminotaur will auto-start the gateway when needed")
-        
-        # Test MCP skills if gateway is running
-        if gateway_running:
-            print(f"\n{Colors.CYAN}Testing MCP Skills:{Colors.RESET}")
-            mcp_store = self.app_dir / "mcp-store"
-            if mcp_store.exists():
-                skills = [item.name for item in mcp_store.iterdir() if item.is_dir()]
-                if skills:
-                    for skill in skills:
-                        try:
-                            # Send dummy test request to each skill
-                            test_request = {
-                                "skill": skill,
-                                "tool": "health" if skill == "mcp-gateway" else "test",
-                                "params": {}
-                            }
-                            url = "http://localhost:9000/invoke"
-                            req = urllib.request.Request(
-                                url,
-                                data=json.dumps(test_request).encode('utf-8'),
-                                headers={'Content-Type': 'application/json'}
-                            )
-                            with urllib.request.urlopen(req, timeout=10) as response:
-                                result = json.loads(response.read().decode('utf-8'))
-                                # Check if we got any response (even error is OK for connectivity test)
-                                print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill}: Reachable")
-                        except Exception as e:
-                            print(f"{Colors.RED}[✗]{Colors.RESET} {skill}: {str(e)[:60]}")
-                else:
-                    print(f"  {Colors.YELLOW}No skills found in mcp-store{Colors.RESET}")
+                    print(f"{Colors.RED}[✗]{Colors.RESET} API key decryption returned empty result")
             else:
-                print(f"  {Colors.RED}MCP store directory not found{Colors.RESET}")
+                print(f"{Colors.RED}[✗]{Colors.RESET} OpenRouter credential file not found")
+        except Exception as e:
+            print(f"{Colors.RED}[✗]{Colors.RESET} Failed to decrypt API key: {str(e)}")
         
+        # Test MCP skills
+        print(f"\n{Colors.CYAN}Testing MCP Skills:{Colors.RESET}")
+        mcp_store = self.app_dir / "mcp-store"
+        if mcp_store.exists():
+            skills = [item.name for item in mcp_store.iterdir() if item.is_dir() and item.name not in ['mcp-gateway', 'openrouter-ai']]
+            if skills:
+                for skill in skills:
+                    skill_executable = mcp_store / skill / f"{skill.split('-')[0]}.mcp"
+                    if skill_executable.exists():
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill}: Executable found")
+                    else:
+                        print(f"{Colors.RED}[✗]{Colors.RESET} {skill}: Executable not found")
+            else:
+                print(f"  {Colors.YELLOW}No active MCP skills found{Colors.RESET}")
+        else:
+            print(f"  {Colors.RED}MCP store directory not found{Colors.RESET}")
+
+        print()
         print()
     
     def show_status(self):
