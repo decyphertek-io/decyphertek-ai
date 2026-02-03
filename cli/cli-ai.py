@@ -210,14 +210,19 @@ class DecyphertekCLI:
             
             if command == '/help':
                 self.show_help()
+                return
             elif command == '/status':
                 self.show_status()
+                return
             elif command == '/config':
                 self.show_config()
+                return
             elif command == '/health':
                 self.show_health()
+                return
             elif command == '/settings':
                 self.show_settings()
+                return
             elif command == '/chat':
                 # Extract message after /chat
                 message = user_input[5:].strip()
@@ -225,6 +230,7 @@ class DecyphertekCLI:
                     self.call_adminotaur(message)
                 else:
                     print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
+                return
             else:
                 # Check if it's an MCP skill command from slash-commands.json
                 try:
