@@ -44,6 +44,12 @@
       "description": "View or modify configuration",
       "builtin": true,
       "enabled": true
+    },
+    "/settings": {
+      "name": "settings",
+      "description": "Interactive settings menu for MCP skills, API keys, and models",
+      "builtin": true,
+      "enabled": true
     }
   },
   "default_routing": {

@@ -206,29 +206,65 @@ class DecyphertekCLI:
         
         # Handle slash commands
         if user_input.startswith('/'):
-            command = user_input.split()[0].lower()
+            parts = user_input.split(None, 1)
+            command = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
             
-            if command == '/help':
-                self.show_help()
-            elif command == '/status':
-                self.show_status()
-            elif command == '/config':
-                self.show_config()
-            elif command == '/health':
-                self.show_health()
-            elif command == '/chat':
-                # Extract message after /chat
-                message = user_input[5:].strip()
-                if message:
-                    self.call_adminotaur(message)
+            # Load slash commands from config
+            try:
+                if not self.slash_commands_path.exists():
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} slash-commands.json not found")
+                    return
+                
+                slash_config = json.loads(self.slash_commands_path.read_text())
+                commands = slash_config.get("commands", {})
+                
+                if command not in commands:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
+                    return
+                
+                cmd_config = commands[command]
+                
+                # Check if command is enabled
+                if not cmd_config.get("enabled", True):
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command {command} is disabled")
+                    return
+                
+                # Route builtin commands
+                if cmd_config.get("builtin"):
+                    self._handle_builtin_command(command, args)
+                # Route MCP skill commands to Adminotaur
+                elif "mcp_skill" in cmd_config:
+                    self.call_adminotaur(user_input)
                 else:
-                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
-            else:
-                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Unknown command: {command}")
-                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Type /help for available commands")
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command {command} not properly configured")
+            
+            except Exception as e:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to process command: {e}")
         else:
             # Execute as Linux shell command
             self.execute_shell_command(user_input)
+    
+    def _handle_builtin_command(self, command: str, args: str):
+        """Handle builtin slash commands"""
+        if command == '/help':
+            self.show_help()
+        elif command == '/status':
+            self.show_status()
+        elif command == '/config':
+            self.show_config()
+        elif command == '/health':
+            self.show_health()
+        elif command == '/settings':
+            self.show_settings()
+        elif command == '/chat':
+            if args:
+                self.call_adminotaur(args)
+            else:
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
+        else:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Unknown builtin command: {command}")
     
     def execute_shell_command(self, command):
         """Execute a shell command and display output"""
@@ -319,8 +355,153 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/status{Colors.RESET}          - Show system status")
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
         print(f"{Colors.GREEN}/health{Colors.RESET}          - Check system health and connectivity")
+        print(f"{Colors.GREEN}/settings{Colors.RESET}        - Interactive settings menu")
         print(f"{Colors.GREEN}exit{Colors.RESET}             - Exit application")
         print(f"\n{Colors.CYAN}Note:{Colors.RESET} Regular commands are executed as shell commands\n")
+    
+    def show_settings(self):
+        """Interactive settings menu"""
+        while True:
+            print(f"\n{Colors.CYAN}{Colors.BOLD}Settings Menu:{Colors.RESET}\n")
+            print(f"{Colors.GREEN}1.{Colors.RESET} Manage MCP Skills (enable/disable)")
+            print(f"{Colors.GREEN}2.{Colors.RESET} Manage API Keys")
+            print(f"{Colors.GREEN}3.{Colors.RESET} Change OpenRouter Model")
+            print(f"{Colors.GREEN}4.{Colors.RESET} Back to main")
+            
+            choice = input(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET} ").strip()
+            
+            if choice == '1':
+                self._manage_mcp_skills()
+            elif choice == '2':
+                self._manage_api_keys()
+            elif choice == '3':
+                self._change_model()
+            elif choice == '4':
+                break
+            else:
+                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Invalid option")
+    
+    def _manage_mcp_skills(self):
+        """Enable/disable MCP skills"""
+        try:
+            skills_registry_path = self.mcp_store_dir / "skills.json"
+            if not skills_registry_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} skills.json not found")
+                return
+            
+            skills_data = json.loads(skills_registry_path.read_text())
+            skills = skills_data.get("skills", {})
+            
+            print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Skills:{Colors.RESET}\n")
+            skill_list = list(skills.items())
+            for idx, (skill_id, skill_config) in enumerate(skill_list, 1):
+                enabled = skill_config.get("enabled", False)
+                status = f"{Colors.GREEN}[ENABLED]{Colors.RESET}" if enabled else f"{Colors.RED}[DISABLED]{Colors.RESET}"
+                print(f"{idx}. {skill_id} {status}")
+            
+            print(f"\n{Colors.CYAN}Enter skill number to toggle, or 0 to go back:{Colors.RESET}")
+            choice = input("> ").strip()
+            
+            if choice == '0':
+                return
+            
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(skill_list):
+                    skill_id, skill_config = skill_list[idx]
+                    current_state = skill_config.get("enabled", False)
+                    skills_data["skills"][skill_id]["enabled"] = not current_state
+                    skills_registry_path.write_text(json.dumps(skills_data, indent=2))
+                    new_state = "enabled" if not current_state else "disabled"
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill_id} {new_state}")
+                else:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid skill number")
+            except ValueError:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid input")
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to manage skills: {e}")
+    
+    def _manage_api_keys(self):
+        """Manage API keys"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}API Key Management:{Colors.RESET}\n")
+        print(f"{Colors.GREEN}1.{Colors.RESET} Add/Update OpenRouter API Key")
+        print(f"{Colors.GREEN}2.{Colors.RESET} Add/Update World News API Key")
+        print(f"{Colors.GREEN}3.{Colors.RESET} View stored credentials")
+        print(f"{Colors.GREEN}4.{Colors.RESET} Back")
+        
+        choice = input(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET} ").strip()
+        
+        if choice == '1':
+            api_key = input(f"{Colors.CYAN}Enter OpenRouter API key:{Colors.RESET} ").strip()
+            if api_key:
+                if self.store_credential("openrouter", api_key):
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key stored")
+                else:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store API key")
+        elif choice == '2':
+            api_key = input(f"{Colors.CYAN}Enter World News API key:{Colors.RESET} ").strip()
+            if api_key:
+                if self.store_credential("worldnews", api_key):
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} World News API key stored")
+                else:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store API key")
+        elif choice == '3':
+            cred_files = list(self.creds_dir.glob("*.enc"))
+            if cred_files:
+                print(f"\n{Colors.CYAN}Stored credentials:{Colors.RESET}")
+                for cred_file in cred_files:
+                    service = cred_file.stem
+                    print(f"  - {service}")
+            else:
+                print(f"{Colors.BLUE}[INFO]{Colors.RESET} No stored credentials")
+    
+    def _change_model(self):
+        """Change OpenRouter model"""
+        try:
+            ai_config_path = self.configs_dir / "ai-config.json"
+            if not ai_config_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} ai-config.json not found")
+                return
+            
+            ai_config = json.loads(ai_config_path.read_text())
+            current_model = ai_config.get("providers", {}).get("openrouter-ai", {}).get("default_model", "")
+            
+            print(f"\n{Colors.CYAN}{Colors.BOLD}Change OpenRouter Model:{Colors.RESET}\n")
+            print(f"Current model: {Colors.GREEN}{current_model}{Colors.RESET}\n")
+            print(f"{Colors.CYAN}Popular models:{Colors.RESET}")
+            print(f"1. anthropic/claude-3.5-sonnet")
+            print(f"2. anthropic/claude-3-opus")
+            print(f"3. openai/gpt-4-turbo")
+            print(f"4. openai/gpt-4o")
+            print(f"5. meta-llama/llama-3.1-70b-instruct")
+            print(f"6. Custom model")
+            
+            choice = input(f"\n{Colors.CYAN}Select option (1-6):{Colors.RESET} ").strip()
+            
+            models = {
+                '1': 'anthropic/claude-3.5-sonnet',
+                '2': 'anthropic/claude-3-opus',
+                '3': 'openai/gpt-4-turbo',
+                '4': 'openai/gpt-4o',
+                '5': 'meta-llama/llama-3.1-70b-instruct'
+            }
+            
+            if choice in models:
+                new_model = models[choice]
+            elif choice == '6':
+                new_model = input(f"{Colors.CYAN}Enter model name:{Colors.RESET} ").strip()
+            else:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid option")
+                return
+            
+            if new_model:
+                ai_config["providers"]["openrouter-ai"]["default_model"] = new_model
+                ai_config_path.write_text(json.dumps(ai_config, indent=2))
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Model changed to: {new_model}")
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to change model: {e}")
     
     def show_health(self):
         """Check system health and connectivity"""
