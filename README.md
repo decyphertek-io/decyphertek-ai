@@ -11,6 +11,8 @@
 
 ## Quick Start
 
+Pyinstaller is a self contained python executable that is cross platform for x86 architecture. Linux , Mac, & Windows. Currenlty on being tested on Linux. 
+
 ### Install
 
 ```bash
