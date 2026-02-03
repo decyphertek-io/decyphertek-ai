@@ -840,29 +840,28 @@ class DecyphertekCLI:
         return base64.b64encode(encrypted).decode()
     
     def decrypt_credential(self, encrypted_credential):
-        """Decrypt credential using SSH private key"""
-        with open(self.ssh_key_path, 'rb') as key_file:
-            private_key = serialization.load_pem_private_key(
-                key_file.read(),
-                password=None,
-                backend=default_backend()
-            )
-        
-        # Handle both bytes and base64 string input
-        if isinstance(encrypted_credential, str):
-            encrypted_bytes = base64.b64decode(encrypted_credential)
-        else:
-            encrypted_bytes = encrypted_credential
+        """Decrypt credential using SSH private key via OpenSSL"""
+        try:
+            # Handle both bytes and base64 string input
+            if isinstance(encrypted_credential, str):
+                encrypted_bytes = base64.b64decode(encrypted_credential)
+            else:
+                encrypted_bytes = encrypted_credential
             
-        decrypted = private_key.decrypt(
-            encrypted_bytes,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
+            # Use OpenSSL to decrypt with SSH private key
+            result = subprocess.run(
+                ["openssl", "pkeyutl", "-decrypt", "-inkey", str(self.ssh_key_path)],
+                input=encrypted_bytes,
+                capture_output=True,
+                text=False
             )
-        )
-        return decrypted.decode()
+            
+            if result.returncode != 0:
+                raise Exception(f"OpenSSL decryption failed: {result.stderr.decode()}")
+            
+            return result.stdout.decode()
+        except Exception as e:
+            raise Exception(f"Decryption error: {str(e)}")
 
 
 def main():
