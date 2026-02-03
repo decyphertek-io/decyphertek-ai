@@ -425,7 +425,26 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
         print(f"{Colors.GREEN}/health{Colors.RESET}          - Check system health and connectivity")
         print(f"{Colors.GREEN}/settings{Colors.RESET}        - Interactive settings menu")
-        print(f"{Colors.GREEN}exit{Colors.RESET}             - Exit application")
+        
+        # Dynamically load MCP slash commands from slash-commands.json
+        try:
+            if self.slash_commands_path.exists():
+                slash_config = json.loads(self.slash_commands_path.read_text())
+                commands = slash_config.get("commands", {})
+                
+                # Filter for MCP skill commands only (not builtin)
+                mcp_commands = {cmd: cfg for cmd, cfg in commands.items() 
+                               if "mcp_skill" in cfg and cfg.get("enabled", True)}
+                
+                if mcp_commands:
+                    print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Skills:{Colors.RESET}\n")
+                    for cmd, cfg in sorted(mcp_commands.items()):
+                        description = cfg.get("description", f"Use {cfg.get('mcp_skill')} skill")
+                        print(f"{Colors.GREEN}{cmd} <query>{Colors.RESET}  - {description}")
+        except Exception as e:
+            pass
+        
+        print(f"\n{Colors.GREEN}exit{Colors.RESET}             - Exit application")
         print(f"\n{Colors.CYAN}Note:{Colors.RESET} Regular commands are executed as shell commands\n")
     
     def show_settings(self):
