@@ -1,0 +1,45 @@
+decyphertek.ai:~$ /chat How are you today?
+[AI] I aim to be direct and honest in my interactions: I'm an AI and don't actually experience feelings or emotions in the way humans do. While I appreciate the friendly greeting, I think it's best to focus on how I can help you today. What would you like assistance with?
+decyphertek.ai:~$ /web Find the weather form New York Today.
+[AI] Unknown command: /web
+Use /help to see available commands
+decyphertek.ai:~$ /help
+
+Available Commands:
+
+/chat <message>  - Chat with AI assistant
+/help            - Show this help message
+/status          - Show system status
+/config          - Show configuration
+/health          - Check system health and connectivity
+/settings        - Interactive settings menu
+
+MCP Skills:
+
+/news <query>  - Search and filter news articles with AI context
+/rag <query>  - Query ChromaDB vector database for context
+/web <query>  - Search the web and answer with context
+
+exit             - Exit application
+
+Note: Regular commands are executed as shell commands
+
+====
+
+
+
+
+
+**Found it.** Adminotaur agent is loading `.json` files, not `.yaml`:
+
+```@/home/adminotaur/Documents/git/agent-store/adminotaur/adminotaur.py:103
+        config_file = self.configs_dir / "slash-commands.json"
+```
+
+```@/home/adminotaur/Documents/git/agent-store/adminotaur/adminotaur.py:110
+        config_file = self.configs_dir / "ai-config.json"
+```
+
+Also lines 121-123 reference `.json` registries.
+
+
