@@ -291,41 +291,129 @@ class DecyphertekCLI:
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
     
+    def start_mcp_server(self, skill_name):
+        """Start MCP server on-demand with decrypted API keys"""
+        try:
+            # Get MCP server path
+            mcp_path = self.mcp_store_dir / skill_name
+            
+            # Find executable in skill directory
+            skill_files = list(mcp_path.glob("*.mcp"))
+            if not skill_files:
+                return None
+            
+            executable = skill_files[0]
+            
+            # Prepare environment with decrypted API keys
+            env = os.environ.copy()
+            
+            # Decrypt and add API keys based on skill requirements
+            if skill_name == "worldnewsapi":
+                worldnews_cred = self.creds_dir / "worldnews.enc"
+                if worldnews_cred.exists():
+                    decrypted_key = self.decrypt_credential("worldnews")
+                    if decrypted_key:
+                        env["WORLDNEWS_API_KEY"] = decrypted_key
+            
+            # Start MCP server process
+            process = subprocess.Popen(
+                [str(executable)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                text=True
+            )
+            
+            return process
+        
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to start MCP server {skill_name}: {e}")
+            return None
+    
     def call_adminotaur(self, user_input):
         """Call Adminotaur agent with user input"""
         try:
-            if not self.adminotaur_agent_path.exists():
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur agent not found. Downloading...")
-                self.download_adminotaur()
+            adminotaur_path = self.agent_store_dir / "adminotaur" / "adminotaur.agent"
             
-            # Decrypt OpenRouter API key and pass via environment variable
+            if not adminotaur_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur agent not found at {adminotaur_path}")
+                return
+            
+            # Decrypt API keys and pass via environment
             env = os.environ.copy()
-            try:
-                cred_file = self.creds_dir / "openrouter.enc"
-                if cred_file.exists():
-                    encrypted_key = cred_file.read_bytes()
-                    decrypted_key = self.decrypt_credential(encrypted_key)
-                    env['OPENROUTER_API_KEY'] = decrypted_key
-            except Exception as e:
-                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Could not decrypt API key: {e}")
             
-            # Call Adminotaur agent executable with user input
+            # Decrypt OpenRouter API key if exists
+            openrouter_cred = self.creds_dir / "openrouter.enc"
+            if openrouter_cred.exists():
+                decrypted_key = self.decrypt_credential("openrouter")
+                if decrypted_key:
+                    env["OPENROUTER_API_KEY"] = decrypted_key
+            
+            # Decrypt World News API key if exists
+            worldnews_cred = self.creds_dir / "worldnews.enc"
+            if worldnews_cred.exists():
+                decrypted_key = self.decrypt_credential("worldnews")
+                if decrypted_key:
+                    env["WORLDNEWS_API_KEY"] = decrypted_key
+            
+            # Check if this is an MCP skill command and start server if needed
+            mcp_process = None
+            if user_input.startswith('/'):
+                command = user_input.split()[0].lower()
+                try:
+                    if self.slash_commands_path.exists():
+                        slash_config = json.loads(self.slash_commands_path.read_text())
+                        commands = slash_config.get("commands", {})
+                        
+                        if command in commands:
+                            cmd_config = commands[command]
+                            skill_name = cmd_config.get("mcp_skill")
+                            if skill_name:
+                                # Start MCP server on-demand
+                                mcp_process = self.start_mcp_server(skill_name)
+                                if mcp_process:
+                                    # Pass MCP server info to Adminotaur via environment
+                                    env["MCP_SERVER_PID"] = str(mcp_process.pid)
+                                    env["MCP_SKILL_NAME"] = skill_name
+                except Exception as e:
+                    pass
+            
+            # Call Adminotaur with user input
             result = subprocess.run(
-                [str(self.adminotaur_agent_path), user_input],
+                [str(adminotaur_path), user_input],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=60,
                 env=env
             )
             
+            # Terminate MCP server if started
+            if mcp_process:
+                try:
+                    mcp_process.terminate()
+                    mcp_process.wait(timeout=5)
+                except:
+                    mcp_process.kill()
+            
             if result.returncode == 0:
-                print(f"{Colors.GREEN}[AI]{Colors.RESET} {result.stdout}")
+                print(f"{Colors.CYAN}[AI]{Colors.RESET} {result.stdout.strip()}")
             else:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur failed: {result.stderr}")
         
         except subprocess.TimeoutExpired:
+            if mcp_process:
+                try:
+                    mcp_process.kill()
+                except:
+                    pass
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur timed out")
         except Exception as e:
+            if mcp_process:
+                try:
+                    mcp_process.kill()
+                except:
+                    pass
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to call Adminotaur: {e}")
     
     def show_help(self):
