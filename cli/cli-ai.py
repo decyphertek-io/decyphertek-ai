@@ -650,8 +650,7 @@ class DecyphertekCLI:
         try:
             cred_file = self.creds_dir / "openrouter.enc"
             if cred_file.exists():
-                encrypted_key = cred_file.read_bytes()
-                decrypted_key = self.decrypt_credential(encrypted_key)
+                decrypted_key = self.decrypt_credential("openrouter")
                 if decrypted_key and len(decrypted_key) > 0:
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key decrypted successfully")
                 else:
@@ -1103,14 +1102,14 @@ class DecyphertekCLI:
         )
         return base64.b64encode(encrypted).decode()
     
-    def decrypt_credential(self, encrypted_credential):
+    def decrypt_credential(self, credential_name):
         """Decrypt credential using SSH private key via OpenSSL"""
         try:
-            # Handle both bytes and base64 string input
-            if isinstance(encrypted_credential, str):
-                encrypted_bytes = base64.b64decode(encrypted_credential)
-            else:
-                encrypted_bytes = encrypted_credential
+            # Read encrypted content from file
+            cred_file = self.creds_dir / f"{credential_name}.enc"
+            if not cred_file.exists():
+                raise Exception(f"Credential file not found: {cred_file}")
+            encrypted_bytes = cred_file.read_bytes()
             
             # Use OpenSSL to decrypt with SSH private key
             result = subprocess.run(
