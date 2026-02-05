@@ -42,12 +42,6 @@ curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/
 
 Removes `~/.decyphertek.ai/` 
 
-### Experimental
-
-```bash
-# Install on Android Termux. Recompiles to work on ARM Archtiecture. Very Experimental. ( Untested on Mobian.)
-curl -fsSL https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/experimental.sh | bash
-```
 
 ## Architecture
 
