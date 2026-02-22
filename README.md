@@ -75,6 +75,9 @@ AI Provider (OpenRouter, etc.)
 - MCP Gateway manages skills and retrieves encrypted credentials
 - Skills call AI providers with decrypted credentials
 
+**Research**
+- https://agentskills.io ( Not implemented )
+
 ## References
 
 ### Repositories
