@@ -166,7 +166,7 @@ class DecyphertekCLI:
             
             # Complete slash commands
             if line.startswith('/'):
-                commands = ['/chat ', '/help', '/status', '/config', '/health']
+                commands = ['/chat ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
                 matches = [cmd for cmd in commands if cmd.startswith(line)]
                 if state < len(matches):
                     return matches[state]
@@ -242,7 +242,13 @@ class DecyphertekCLI:
                         if command in commands:
                             cmd_config = commands[command]
                             if cmd_config.get("enabled", True) and "mcp_skill" in cmd_config:
-                                self.call_adminotaur(user_input)
+                                # Extract the query after the command
+                                parts = user_input.split(None, 1)
+                                query = parts[1] if len(parts) > 1 else ""
+                                if not query:
+                                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: {command} <query>")
+                                    return
+                                self.call_mcp_skill(cmd_config, query)
                                 return
                 except Exception as e:
                     print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Exception in MCP routing: {e}")
@@ -298,22 +304,149 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out")
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
-    
+
+    def _find_mcp_executable(self, skill_dir: Path, skill_id: str) -> Path | None:
+        """Find the MCP executable in a skill directory, trying multiple patterns."""
+        # Try exact name patterns in order of preference
+        candidates = [
+            skill_dir / f"{skill_id}.mcp",
+            skill_dir / f"{skill_id.split('-')[0]}.mcp",
+        ]
+        # Also glob for any .mcp file
+        candidates += list(skill_dir.glob("*.mcp"))
+
+        for candidate in candidates:
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                return candidate
+
+        # Try any executable file in the directory as a last resort
+        for f in skill_dir.iterdir():
+            if f.is_file() and os.access(f, os.X_OK):
+                return f
+
+        return None
+
+    def call_mcp_skill(self, cmd_config: dict, query: str):
+        """
+        Directly invoke an MCP skill executable with the user query,
+        then pass the result to Adminotaur (or print it directly).
+        """
+        skill_name = cmd_config.get("mcp_skill", "")
+        skill_dir = self.mcp_store_dir / skill_name
+
+        if not skill_dir.exists():
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} MCP skill directory not found: {skill_dir}")
+            print(f"{Colors.BLUE}[INFO]{Colors.RESET}  Run /status to check installed skills.")
+            return
+
+        executable = self._find_mcp_executable(skill_dir, skill_name)
+        if not executable:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} No executable found in {skill_dir}")
+            return
+
+        # Build environment with decrypted credentials
+        env = os.environ.copy()
+
+        # Pass config paths explicitly so the skill/agent can find yaml configs
+        env["DECYPHERTEK_CONFIGS_DIR"] = str(self.configs_dir)
+        env["DECYPHERTEK_AI_CONFIG"] = str(self.ai_config_path)
+        env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
+        env["DECYPHERTEK_MCP_STORE"] = str(self.mcp_store_dir)
+        env["DECYPHERTEK_AGENT_STORE"] = str(self.agent_store_dir)
+
+        # Decrypt skill credentials if available
+        if self.skills_registry_path.exists():
+            try:
+                skills_config = yaml.safe_load(self.skills_registry_path.read_text())
+                skill_info = skills_config.get("skills", {}).get(skill_name, {})
+                credential = skill_info.get("credentials")
+                env_var = skill_info.get("env_mapping")
+
+                if credential and env_var:
+                    cred_file = self.creds_dir / f"{credential}.enc"
+                    if cred_file.exists():
+                        decrypted_key = self.decrypt_credential(credential)
+                        if decrypted_key:
+                            env[env_var] = decrypted_key
+                    else:
+                        print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} No credential file for '{credential}'. "
+                              f"Skill may not work without an API key.")
+            except Exception as e:
+                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error loading skill credentials: {e}")
+
+        # Also inject the OpenRouter API key so the skill can call the AI provider
+        try:
+            openrouter_cred = self.creds_dir / "openrouter.enc"
+            if openrouter_cred.exists():
+                openrouter_key = self.decrypt_credential("openrouter")
+                if openrouter_key:
+                    env["OPENROUTER_API_KEY"] = openrouter_key
+
+            # Pass the preferred model from ai-config.yaml
+            if self.ai_config_path.exists():
+                ai_config = yaml.safe_load(self.ai_config_path.read_text())
+                model = (ai_config.get("providers", {})
+                                  .get("openrouter-ai", {})
+                                  .get("default_model", ""))
+                if model:
+                    env["OPENROUTER_MODEL"] = model
+                base_url = (ai_config.get("providers", {})
+                                     .get("openrouter-ai", {})
+                                     .get("base_url", ""))
+                if base_url:
+                    env["OPENROUTER_BASE_URL"] = base_url
+        except Exception as e:
+            print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error injecting OpenRouter key: {e}")
+
+        print(f"{Colors.CYAN}[MCP]{Colors.RESET} Running skill '{skill_name}' ...")
+
+        try:
+            result = subprocess.run(
+                [str(executable), query],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=env
+            )
+
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                if output:
+                    print(f"{Colors.CYAN}[AI]{Colors.RESET} {output}")
+                else:
+                    print(f"{Colors.BLUE}[INFO]{Colors.RESET} Skill returned no output.")
+            else:
+                print(f"{Colors.RED}[ERROR]{Colors.RESET} Skill '{skill_name}' failed (exit {result.returncode}):")
+                if result.stderr:
+                    print(f"  {result.stderr.strip()}")
+                if result.stdout:
+                    print(f"  stdout: {result.stdout.strip()}")
+
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} Skill '{skill_name}' timed out after 60s")
+        except Exception as e:
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} Failed to run skill '{skill_name}': {e}")
+
     def start_mcp_server(self, skill_name):
         """Start MCP server on-demand with decrypted API keys"""
         try:
             # Get MCP server path
             mcp_path = self.mcp_store_dir / skill_name
             
-            # Find executable in skill directory
-            skill_files = list(mcp_path.glob("*.mcp"))
-            if not skill_files:
+            executable = self._find_mcp_executable(mcp_path, skill_name)
+            if not executable:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} No executable found for skill: {skill_name}")
                 return None
-            
-            executable = skill_files[0]
             
             # Prepare environment with decrypted API keys
             env = os.environ.copy()
+
+            # Pass config paths explicitly
+            env["DECYPHERTEK_CONFIGS_DIR"] = str(self.configs_dir)
+            env["DECYPHERTEK_AI_CONFIG"] = str(self.ai_config_path)
+            env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
+            env["DECYPHERTEK_MCP_STORE"] = str(self.mcp_store_dir)
+            env["DECYPHERTEK_AGENT_STORE"] = str(self.agent_store_dir)
             
             # Dynamically decrypt MCP skill credentials from skills.yaml
             if self.skills_registry_path.exists():
@@ -356,6 +489,16 @@ class DecyphertekCLI:
                 return
             
             env = os.environ.copy()
+
+            # Pass config paths explicitly so Adminotaur can find yaml configs
+            # (Adminotaur may default to .json — these env vars let it use .yaml)
+            env["DECYPHERTEK_CONFIGS_DIR"] = str(self.configs_dir)
+            env["DECYPHERTEK_AI_CONFIG"] = str(self.ai_config_path)
+            env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
+            env["DECYPHERTEK_MCP_STORE"] = str(self.mcp_store_dir)
+            env["DECYPHERTEK_AGENT_STORE"] = str(self.agent_store_dir)
+            env["DECYPHERTEK_WORKERS_REGISTRY"] = str(self.workers_registry_path)
+            env["DECYPHERTEK_SKILLS_REGISTRY"] = str(self.skills_registry_path)
             
             # Dynamically decrypt agent credentials from workers.yaml
             if self.workers_registry_path.exists():
@@ -370,37 +513,29 @@ class DecyphertekCLI:
                         decrypted_key = self.decrypt_credential(credential)
                         if decrypted_key and env_var:
                             env[env_var] = decrypted_key
-            
-            # Check if this is an MCP skill command and start server if needed
-            if user_input.startswith('/'):
-                command = user_input.split()[0].lower()
-                if self.slash_commands_path.exists():
-                    slash_config = yaml.safe_load(self.slash_commands_path.read_text())
-                    commands = slash_config.get("commands", {})
-                    
-                    if command in commands:
-                        cmd_config = commands[command]
-                        skill_name = cmd_config.get("mcp_skill")
-                        if skill_name:
-                            # Dynamically decrypt MCP skill credentials from skills.yaml
-                            if self.skills_registry_path.exists():
-                                skills_config = yaml.safe_load(self.skills_registry_path.read_text())
-                                skill_info = skills_config.get("skills", {}).get(skill_name, {})
-                                credential = skill_info.get("credentials")
-                                env_var = skill_info.get("env_mapping")
-                                
-                                if credential:
-                                    cred_file = self.creds_dir / f"{credential}.enc"
-                                    if cred_file.exists():
-                                        decrypted_key = self.decrypt_credential(credential)
-                                        if decrypted_key and env_var:
-                                            env[env_var] = decrypted_key
-                            
-                            # Start MCP server on-demand
-                            mcp_process = self.start_mcp_server(skill_name)
-                            if mcp_process:
-                                env["MCP_SERVER_PID"] = str(mcp_process.pid)
-                                env["MCP_SKILL_NAME"] = skill_name
+
+            # Always inject OpenRouter key and model for /chat usage
+            try:
+                openrouter_cred = self.creds_dir / "openrouter.enc"
+                if openrouter_cred.exists():
+                    openrouter_key = self.decrypt_credential("openrouter")
+                    if openrouter_key:
+                        env["OPENROUTER_API_KEY"] = openrouter_key
+
+                if self.ai_config_path.exists():
+                    ai_config = yaml.safe_load(self.ai_config_path.read_text())
+                    model = (ai_config.get("providers", {})
+                                      .get("openrouter-ai", {})
+                                      .get("default_model", ""))
+                    if model:
+                        env["OPENROUTER_MODEL"] = model
+                    base_url = (ai_config.get("providers", {})
+                                         .get("openrouter-ai", {})
+                                         .get("base_url", ""))
+                    if base_url:
+                        env["OPENROUTER_BASE_URL"] = base_url
+            except Exception as e:
+                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error injecting OpenRouter key: {e}")
             
             # Call Adminotaur with user input
             result = subprocess.run(
@@ -411,32 +546,14 @@ class DecyphertekCLI:
                 env=env
             )
             
-            # Terminate MCP server if started
-            if mcp_process:
-                try:
-                    mcp_process.terminate()
-                    mcp_process.wait(timeout=5)
-                except:
-                    mcp_process.kill()
-            
             if result.returncode == 0:
                 print(f"{Colors.CYAN}[AI]{Colors.RESET} {result.stdout.strip()}")
             else:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur failed: {result.stderr}")
         
         except subprocess.TimeoutExpired:
-            if mcp_process:
-                try:
-                    mcp_process.kill()
-                except:
-                    pass
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur timed out")
         except Exception as e:
-            if mcp_process:
-                try:
-                    mcp_process.kill()
-                except:
-                    pass
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to call Adminotaur: {e}")
     
     def show_help(self):
@@ -590,9 +707,10 @@ class DecyphertekCLI:
             print(f"3. openai/gpt-4-turbo")
             print(f"4. openai/gpt-4o")
             print(f"5. meta-llama/llama-3.1-70b-instruct")
-            print(f"6. Custom model")
+            print(f"6. deepseek/deepseek-r1-0528:free")
+            print(f"7. Custom model")
             
-            print(f"\n{Colors.CYAN}Select option (1-6):{Colors.RESET}", end=" ")
+            print(f"\n{Colors.CYAN}Select option (1-7):{Colors.RESET}", end=" ")
             choice = input().strip()
             
             models = {
@@ -600,12 +718,13 @@ class DecyphertekCLI:
                 '2': 'anthropic/claude-3-opus',
                 '3': 'openai/gpt-4-turbo',
                 '4': 'openai/gpt-4o',
-                '5': 'meta-llama/llama-3.1-70b-instruct'
+                '5': 'meta-llama/llama-3.1-70b-instruct',
+                '6': 'deepseek/deepseek-r1-0528:free',
             }
             
             if choice in models:
                 new_model = models[choice]
-            elif choice == '6':
+            elif choice == '7':
                 print(f"{Colors.CYAN}Enter model name:{Colors.RESET}", end=" ")
                 new_model = input().strip()
             else:
@@ -614,7 +733,8 @@ class DecyphertekCLI:
             
             if new_model:
                 ai_config["providers"]["openrouter-ai"]["default_model"] = new_model
-                ai_config_path.write_text(json.dumps(ai_config, indent=2))
+                # Save back as YAML to preserve format
+                ai_config_path.write_text(yaml.dump(ai_config, default_flow_style=False))
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Model changed to: {new_model}")
         
         except Exception as e:
@@ -664,18 +784,32 @@ class DecyphertekCLI:
         print(f"\n{Colors.CYAN}Testing MCP Skills:{Colors.RESET}")
         mcp_store = self.app_dir / "mcp-store"
         if mcp_store.exists():
-            skills = [item.name for item in mcp_store.iterdir() if item.is_dir() and item.name not in ['mcp-gateway', 'openrouter-ai']]
+            skills = [item for item in mcp_store.iterdir()
+                      if item.is_dir() and item.name not in ['mcp-gateway', 'openrouter-ai']]
             if skills:
-                for skill in skills:
-                    skill_executable = mcp_store / skill / f"{skill.split('-')[0]}.mcp"
-                    if skill_executable.exists():
-                        print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill}: Executable found")
+                for skill_dir in skills:
+                    executable = self._find_mcp_executable(skill_dir, skill_dir.name)
+                    if executable:
+                        print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill_dir.name}: Executable found ({executable.name})")
                     else:
-                        print(f"{Colors.RED}[✗]{Colors.RESET} {skill}: Executable not found")
+                        print(f"{Colors.RED}[✗]{Colors.RESET} {skill_dir.name}: No executable found in {skill_dir}")
             else:
                 print(f"  {Colors.YELLOW}No active MCP skills found{Colors.RESET}")
         else:
             print(f"  {Colors.RED}MCP store directory not found{Colors.RESET}")
+
+        # Test config files
+        print(f"\n{Colors.CYAN}Testing Config Files:{Colors.RESET}")
+        for config_name, config_path in [
+            ("ai-config.yaml", self.ai_config_path),
+            ("slash-commands.yaml", self.slash_commands_path),
+            ("workers.yaml", self.workers_registry_path),
+            ("skills.yaml", self.skills_registry_path),
+        ]:
+            if config_path.exists():
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} {config_name}: Found at {config_path}")
+            else:
+                print(f"{Colors.RED}[✗]{Colors.RESET} {config_name}: NOT found at {config_path}")
 
         print()
         print()
@@ -693,6 +827,22 @@ class DecyphertekCLI:
             print(f"{Colors.GREEN}[✓]{Colors.RESET} Stored credentials: {len(creds)}")
             for cred in creds:
                 print(f"  - {cred.stem}")
+
+        # Show installed MCP skills
+        print(f"\n{Colors.CYAN}Installed MCP Skills:{Colors.RESET}")
+        if self.mcp_store_dir.exists():
+            skills = [item for item in self.mcp_store_dir.iterdir()
+                      if item.is_dir() and item.name not in ['mcp-gateway', 'openrouter-ai']]
+            if skills:
+                for skill_dir in skills:
+                    executable = self._find_mcp_executable(skill_dir, skill_dir.name)
+                    status = f"{Colors.GREEN}[ready]{Colors.RESET}" if executable else f"{Colors.RED}[no executable]{Colors.RESET}"
+                    print(f"  {skill_dir.name} {status}")
+            else:
+                print(f"  {Colors.YELLOW}None installed{Colors.RESET}")
+        else:
+            print(f"  {Colors.RED}MCP store not found{Colors.RESET}")
+
         print()
     
     def show_config(self):
@@ -704,11 +854,28 @@ class DecyphertekCLI:
                 config = yaml.safe_load(self.ai_config_path.read_text())
                 print(f"{Colors.GREEN}AI Config:{Colors.RESET}")
                 print(f"  Default Provider: {config.get('default_provider', 'N/A')}")
-                print(f"  Providers: {', '.join(config.get('providers', {}).keys())}")
-            except:
-                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load ai-config.yaml")
+                providers = config.get('providers', {})
+                print(f"  Providers: {', '.join(providers.keys())}")
+                for pid, pcfg in providers.items():
+                    model = pcfg.get('default_model', 'N/A')
+                    print(f"    {pid}: model={model}")
+            except Exception as e:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load ai-config.yaml: {e}")
         else:
-            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} ai-config.yaml not found")
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} ai-config.yaml not found at {self.ai_config_path}")
+
+        if self.slash_commands_path.exists():
+            try:
+                slash_config = yaml.safe_load(self.slash_commands_path.read_text())
+                commands = slash_config.get("commands", {})
+                enabled_mcp = [cmd for cmd, cfg in commands.items() if "mcp_skill" in cfg and cfg.get("enabled", True)]
+                print(f"\n{Colors.GREEN}Slash Commands Config:{Colors.RESET}")
+                print(f"  MCP skill commands enabled: {', '.join(enabled_mcp) if enabled_mcp else 'none'}")
+            except Exception as e:
+                print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to load slash-commands.yaml: {e}")
+        else:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} slash-commands.yaml not found at {self.slash_commands_path}")
+
         print()
     
     def first_run_setup(self):
