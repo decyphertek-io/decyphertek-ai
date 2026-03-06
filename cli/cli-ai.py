@@ -412,7 +412,14 @@ class DecyphertekCLI:
             if result.returncode == 0:
                 output = result.stdout.strip()
                 if output:
-                    print(f"{Colors.CYAN}[AI]{Colors.RESET} {output}")
+                    # Pipe MCP skill output through Adminotaur for AI summarization
+                    summarization_prompt = (
+                        f"The user asked: {query}\n\n"
+                        f"Here are the raw results from the {skill_name} skill:\n\n"
+                        f"{output}\n\n"
+                        f"Please provide a helpful, concise summary of these results."
+                    )
+                    self.call_adminotaur(summarization_prompt)
                 else:
                     print(f"{Colors.BLUE}[INFO]{Colors.RESET} Skill returned no output.")
             else:
