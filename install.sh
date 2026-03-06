@@ -44,21 +44,29 @@ fi
 # Set permissions
 chmod +x "${INSTALL_DIR}/${APP_NAME}"
 
-# Add to PATH if not already there
-SHELL_RC=""
-if [ -n "$BASH_VERSION" ]; then
-    SHELL_RC="$HOME/.bashrc"
-elif [ -n "$ZSH_VERSION" ]; then
-    SHELL_RC="$HOME/.zshrc"
-fi
+# Add to PATH in all existing shell config files
+PATH_LINE='export PATH="$HOME/.decyphertek.ai/bin:$PATH"'
+ADDED_TO=""
 
-if [ -n "$SHELL_RC" ]; then
-    if ! grep -q "/.decyphertek.ai/bin" "$SHELL_RC" 2>/dev/null; then
-        echo "" >> "$SHELL_RC"
-        echo "# Decyphertek AI CLI" >> "$SHELL_RC"
-        echo 'export PATH="$HOME/.decyphertek.ai/bin:$PATH"' >> "$SHELL_RC"
-        echo -e "${GREEN}[✓]${NC} Added to PATH in $SHELL_RC"
+for RC_FILE in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.zshrc"; do
+    if [ -f "$RC_FILE" ]; then
+        if ! grep -q "/.decyphertek.ai/bin" "$RC_FILE" 2>/dev/null; then
+            echo "" >> "$RC_FILE"
+            echo "# Decyphertek AI CLI" >> "$RC_FILE"
+            echo "$PATH_LINE" >> "$RC_FILE"
+            echo -e "${GREEN}[✓]${NC} Added to PATH in $RC_FILE"
+            ADDED_TO="$RC_FILE"
+        fi
     fi
+done
+
+# If nothing existed, create .profile as fallback
+if [ -z "$ADDED_TO" ]; then
+    echo "" >> "$HOME/.profile"
+    echo "# Decyphertek AI CLI" >> "$HOME/.profile"
+    echo "$PATH_LINE" >> "$HOME/.profile"
+    echo -e "${GREEN}[✓]${NC} Added to PATH in $HOME/.profile"
+    ADDED_TO="$HOME/.profile"
 fi
 
 echo ""
@@ -67,8 +75,8 @@ echo ""
 echo -e "${BLUE}Installed to:${NC} ${INSTALL_DIR}/${APP_NAME}"
 echo ""
 echo -e "${BLUE}Run:${NC}"
-echo -e "  source $SHELL_RC  # Reload shell config"
-echo -e "  decyphertek.ai    # Start the CLI"
+echo -e "  source ${ADDED_TO}  # Reload shell config"
+echo -e "  decyphertek.ai      # Start the CLI"
 echo ""
 echo -e "${BLUE}Or run directly:${NC}"
 echo -e "  ${INSTALL_DIR}/${APP_NAME}"
