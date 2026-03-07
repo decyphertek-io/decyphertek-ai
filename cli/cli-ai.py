@@ -531,8 +531,27 @@ class DecyphertekCLI:
                         if decrypted_key:
                             env[env_var] = decrypted_key
                     else:
-                        print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} No credential file for '{credential}'. "
-                              f"Skill may not work without an API key.")
+                        print(f"\n{Colors.YELLOW}[WARNING]{Colors.RESET} No API key found for '{credential}'.")
+                        try:
+                            answer = input(f"Would you like to add one now? (Y/n): ").strip().lower()
+                        except (EOFError, KeyboardInterrupt):
+                            answer = "n"
+                        if answer in ("", "y", "yes"):
+                            try:
+                                import getpass as _getpass
+                                api_key = _getpass.getpass(f"Enter API key for '{credential}': ").strip()
+                                if api_key:
+                                    if self.store_credential(credential, api_key):
+                                        env[env_var] = api_key
+                                        print(f"{Colors.GREEN}[✓]{Colors.RESET} API key stored and will be used now.\n")
+                                    else:
+                                        print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} Failed to store API key. Continuing without it.\n")
+                                else:
+                                    print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} No key entered. Continuing without it.\n")
+                            except Exception as _e:
+                                print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} Could not store key: {_e}\n")
+                        else:
+                            print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} Skipping. Skill may not work without an API key.\n")
             except Exception as e:
                 print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error loading skill credentials: {e}")
 
