@@ -1,5 +1,8 @@
+# Release script (maintainer only — not for distribution)
+build-release.sh
+
 # Build artifacts
-#dist/
+dist/
 build/
 *.spec
 
