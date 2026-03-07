@@ -4,6 +4,8 @@
 
 ## Tech Stack
 - **LangGraph**: Agent orchestration and workflow management
+- **LangChain**: Agent framework and tool integrations
+- **Agent Skills SDK**: Skill/tool management for LangChain agents
 - **FastMCP**: MCP server implementation for skills/tools
 - **ChromaDB**: Vector database for RAG functionality
 - **uv**: Python version and dependency management
@@ -87,6 +89,8 @@ AI Provider (OpenRouter, etc.)
 
 ### Tech Stack
 - **[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview)** - Agent orchestration framework
+- **[LangChain](https://python.langchain.com/)** - Agent framework and tool integrations
+- **[Agent Skills SDK](https://agentskills.io)** - Skill/tool management for LangChain agents
 - **[FastMCP](https://github.com/jlowin/fastmcp)** - MCP server implementation
 - **[ChromaDB](https://www.trychroma.com/)** - Vector database for RAG
 - **[uv](https://docs.astral.sh/uv/)** - Python package and project manager
