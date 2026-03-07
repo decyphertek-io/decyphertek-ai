@@ -32,6 +32,12 @@ commands:
     ai_provider: openrouter-ai
     enabled: true
 
+  /build:
+    name: build
+    description: Build a new agent (/build agent) or MCP skill (/build mcp) using AI
+    builtin: true
+    enabled: true
+
   /help:
     name: help
     description: Show available commands and system info

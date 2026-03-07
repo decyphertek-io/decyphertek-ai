@@ -181,7 +181,7 @@ class DecyphertekCLI:
             
             # Complete slash commands
             if line.startswith('/') and not os.path.exists(line.split()[0]):
-                commands = ['/chat ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
+                commands = ['/build agent', '/build mcp', '/chat ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
                 # Also add dynamic slash commands from slash-commands.yaml
                 try:
                     if self.slash_commands_path.exists():
@@ -243,7 +243,17 @@ class DecyphertekCLI:
         if user_input.startswith('/'):
             command = user_input.split()[0].lower()
             
-            if command == '/help':
+            if command == '/build':
+                parts = user_input.split(None, 2)
+                subcommand = parts[1].lower() if len(parts) > 1 else ''
+                if subcommand == 'agent':
+                    self.build_agent()
+                elif subcommand == 'mcp':
+                    self.build_mcp()
+                else:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /build agent  or  /build mcp")
+                return
+            elif command == '/help':
                 self.show_help()
                 return
             elif command == '/status':
@@ -295,6 +305,90 @@ class DecyphertekCLI:
             # Execute as Linux shell command
             self.execute_shell_command(user_input)
     
+    def _prompt(self, question: str) -> str:
+        """Prompt the user for input, restoring readline after."""
+        try:
+            return input(f"{Colors.CYAN}{question}{Colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return ""
+
+    def _run_builder_in_background(self, agent_path: str, spec: dict, label: str):
+        """Run a builder agent binary in a background thread, print result when done."""
+        import threading
+        import json as _json
+
+        def _run():
+            try:
+                if not Path(agent_path).exists():
+                    print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Builder not found: {agent_path}")
+                    print(f"{Colors.BLUE}[{label}]{Colors.RESET} Download it with: /settings → Download agents")
+                    return
+                result = subprocess.run(
+                    [agent_path],
+                    input=_json.dumps(spec),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                output = result.stdout.strip() or result.stderr.strip()
+                print(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n")
+            except subprocess.TimeoutExpired:
+                print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Timed out after 5 minutes\n")
+            except Exception as e:
+                print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Error: {e}\n")
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        print(f"{Colors.BLUE}[{label}]{Colors.RESET} Running in background — you can keep working...")
+
+    def build_agent(self):
+        """Interactive /build agent flow"""
+        print(f"\n{Colors.CYAN}=== Build Agent ==={Colors.RESET}")
+        name = self._prompt("Agent name?")
+        if not name:
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Cancelled.")
+            return
+        purpose = self._prompt("What should this agent do?")
+        if not purpose:
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Cancelled.")
+            return
+        tools = self._prompt("What tools/skills does it need?")
+        apis = self._prompt("Any external APIs or API keys needed?")
+
+        spec = {
+            "name": name.lower().replace(" ", "-"),
+            "purpose": purpose,
+            "tools": tools,
+            "apis": apis,
+        }
+
+        agent_path = str(self.agent_store_dir / "agent-builder" / "agent-builder.agent")
+        self._run_builder_in_background(agent_path, spec, "agent-builder")
+
+    def build_mcp(self):
+        """Interactive /build mcp flow"""
+        print(f"\n{Colors.CYAN}=== Build MCP Skill ==={Colors.RESET}")
+        name = self._prompt("Skill name?")
+        if not name:
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Cancelled.")
+            return
+        purpose = self._prompt("What should this skill do?")
+        if not purpose:
+            print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Cancelled.")
+            return
+        api = self._prompt("What API does it call?")
+        api_keys = self._prompt("Any API keys needed?")
+
+        spec = {
+            "name": name.lower().replace(" ", "-"),
+            "purpose": purpose,
+            "api": api,
+            "api_keys": api_keys,
+        }
+
+        agent_path = str(self.agent_store_dir / "mcp-builder" / "mcp-builder.agent")
+        self._run_builder_in_background(agent_path, spec, "mcp-builder")
+
     # Commands that require a full interactive TTY (no output capture)
     _INTERACTIVE_COMMANDS = {
         'vim', 'vi', 'nano', 'emacs', 'less', 'more', 'man', 'top', 'htop',
