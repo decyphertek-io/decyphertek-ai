@@ -1237,18 +1237,20 @@ class DecyphertekCLI:
             repo_url = adminotaur_config.get("repo_url", "")
             folder_path = adminotaur_config.get("folder_path", "")
             executable = adminotaur_config.get("executable", "")
+            release_url = adminotaur_config.get("release_url", "")
             
             if not repo_url or not folder_path or not executable:
                 print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Invalid registry format")
                 return
             
-            # Convert GitHub URL to raw URL base
-            raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
-            
             print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Downloading Adminotaur agent...")
             
-            # Download agent executable
-            agent_url = raw_base + executable
+            # Use release_url if available, otherwise fall back to raw GitHub URL
+            if release_url:
+                agent_url = release_url
+            else:
+                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                agent_url = raw_base + executable
             with urllib.request.urlopen(agent_url) as response:
                 agent_data = response.read()
                 self.adminotaur_agent_path.write_bytes(agent_data)
