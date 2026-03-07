@@ -32,6 +32,12 @@ commands:
     ai_provider: openrouter-ai
     enabled: true
 
+  /code:
+    name: code
+    description: AI coding agent with file system access — write, read, edit files and run shell commands in your home directory
+    builtin: true
+    enabled: true
+
   /build:
     name: build
     description: Build a new agent (/build agent) or MCP skill (/build mcp) using AI

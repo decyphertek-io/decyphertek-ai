@@ -183,7 +183,7 @@ class DecyphertekCLI:
             
             # Complete slash commands
             if line.startswith('/') and not os.path.exists(line.split()[0]):
-                commands = ['/build agent', '/build mcp', '/chat ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
+                commands = ['/build agent', '/build mcp', '/chat ', '/code ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
                 # Also add dynamic slash commands from slash-commands.yaml
                 try:
                     if self.slash_commands_path.exists():
@@ -277,6 +277,15 @@ class DecyphertekCLI:
                     self.call_adminotaur(message)
                 else:
                     print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /chat <your message>")
+                return
+            elif command == '/code':
+                # Extract coding instruction after /code — routes to Adminotaur with file system tools
+                message = user_input[5:].strip()
+                if message:
+                    self.call_adminotaur(message)
+                else:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Usage: /code <instruction>")
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Example: /code create ~/Downloads/hello.txt with content 'Hello World'")
                 return
             else:
                 # Check if it's an MCP skill command from slash-commands.yaml
@@ -719,6 +728,7 @@ class DecyphertekCLI:
         """Show available commands"""
         print(f"\n{Colors.CYAN}{Colors.BOLD}Available Commands:{Colors.RESET}\n")
         print(f"{Colors.GREEN}/chat <message>{Colors.RESET}  - Chat with AI assistant")
+        print(f"{Colors.GREEN}/code <instruction>{Colors.RESET} - AI coding agent: write/read/edit files and run shell commands")
         print(f"{Colors.GREEN}/help{Colors.RESET}            - Show this help message")
         print(f"{Colors.GREEN}/status{Colors.RESET}          - Show system status")
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
