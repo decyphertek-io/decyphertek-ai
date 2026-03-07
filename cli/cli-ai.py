@@ -725,11 +725,14 @@ class DecyphertekCLI:
             except Exception as e:
                 print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error injecting OpenRouter key: {e}")
             
-            # Call Adminotaur with user input — no overall timeout; agent manages its own per-call timeouts
+            # Call Adminotaur with user input via stdin to avoid ARG_MAX limits on large payloads
+            # (e.g. MCP skill output piped as a summarization prompt can exceed ~2MB argv limit)
             # stdout/stderr pass through directly so the user sees live progress
             result = subprocess.run(
-                [str(adminotaur_path), user_input],
-                env=env
+                [str(adminotaur_path), "--stdin"],
+                input=user_input,
+                env=env,
+                text=True,
             )
             
             if result.returncode != 0:
