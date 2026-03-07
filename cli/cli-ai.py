@@ -705,22 +705,15 @@ class DecyphertekCLI:
             except Exception as e:
                 print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} Error injecting OpenRouter key: {e}")
             
-            # Call Adminotaur with user input
+            # Call Adminotaur with user input — no overall timeout; agent manages its own per-call timeouts
+            # stdout/stderr pass through directly so the user sees live progress
             result = subprocess.run(
                 [str(adminotaur_path), user_input],
-                capture_output=True,
-                text=True,
-                timeout=60,
                 env=env
             )
             
-            if result.returncode == 0:
-                print(f"{Colors.CYAN}[AI]{Colors.RESET} {result.stdout.strip()}")
-            else:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur failed: {result.stderr}")
-        
-        except subprocess.TimeoutExpired:
-            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur timed out")
+            if result.returncode != 0:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Adminotaur exited with code {result.returncode}")
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to call Adminotaur: {e}")
     
