@@ -750,63 +750,211 @@ class DecyphertekCLI:
         """Interactive settings menu"""
         while True:
             print(f"\n{Colors.CYAN}{Colors.BOLD}Settings Menu:{Colors.RESET}\n")
-            print(f"{Colors.GREEN}1.{Colors.RESET} Manage MCP Skills (enable/disable)")
-            print(f"{Colors.GREEN}2.{Colors.RESET} Manage API Keys")
-            print(f"{Colors.GREEN}3.{Colors.RESET} Change OpenRouter Model")
-            print(f"{Colors.GREEN}4.{Colors.RESET} Back to main")
-            
-            print(f"\n{Colors.CYAN}Select option (1-4):{Colors.RESET}", end=" ")
+            print(f"{Colors.GREEN}1.{Colors.RESET} Manage Agents (add/remove)")
+            print(f"{Colors.GREEN}2.{Colors.RESET} Manage MCP Skills (add/remove)")
+            print(f"{Colors.GREEN}3.{Colors.RESET} Manage Apps (add/remove)")
+            print(f"{Colors.GREEN}4.{Colors.RESET} Manage API Keys")
+            print(f"{Colors.GREEN}5.{Colors.RESET} Change OpenRouter Model")
+            print(f"{Colors.GREEN}6.{Colors.RESET} Back to main")
+
+            print(f"\n{Colors.CYAN}Select option (1-6):{Colors.RESET}", end=" ")
             choice = input().strip()
-            
+
             if choice == '1':
-                self._manage_mcp_skills()
+                self._manage_agents()
             elif choice == '2':
-                self._manage_api_keys()
+                self._manage_mcp_skills()
             elif choice == '3':
-                self._change_model()
+                self._manage_apps()
             elif choice == '4':
+                self._manage_api_keys()
+            elif choice == '5':
+                self._change_model()
+            elif choice == '6':
                 break
             else:
                 print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Invalid option")
     
-    def _manage_mcp_skills(self):
-        """Enable/disable MCP skills"""
+    # Required items that cannot be removed
+    REQUIRED_AGENTS = {"adminotaur"}
+    REQUIRED_APPS = {"chromadb"}
+
+    def _manage_agents(self):
+        """Add or remove agents from the agent store"""
         try:
-            skills_registry_path = self.mcp_store_dir / "skills.yaml"
-            if not skills_registry_path.exists():
+            if not self.workers_registry_path.exists():
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} workers.yaml not found")
+                return
+
+            registry = yaml.safe_load(self.workers_registry_path.read_text())
+            agents = registry.get("agents", {})
+
+            while True:
+                print(f"\n{Colors.CYAN}{Colors.BOLD}Agents:{Colors.RESET}\n")
+                agent_list = list(agents.items())
+                for idx, (agent_id, agent_config) in enumerate(agent_list, 1):
+                    installed = (self.agent_store_dir / agent_id / agent_config.get("executable", "")).exists()
+                    required = agent_id in self.REQUIRED_AGENTS
+                    status = f"{Colors.GREEN}[INSTALLED]{Colors.RESET}" if installed else f"{Colors.RED}[NOT INSTALLED]{Colors.RESET}"
+                    lock = f" {Colors.YELLOW}[REQUIRED]{Colors.RESET}" if required else ""
+                    print(f"{idx}. {agent_id} {status}{lock}")
+
+                print(f"\n{Colors.CYAN}Enter agent number to install/remove, or 0 to go back:{Colors.RESET}")
+                choice = input("> ").strip()
+                if choice == '0':
+                    break
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(agent_list):
+                        agent_id, agent_config = agent_list[idx]
+                        if agent_id in self.REQUIRED_AGENTS:
+                            print(f"{Colors.YELLOW}[PROTECTED]{Colors.RESET} {agent_id} is required and cannot be removed")
+                            continue
+                        agent_path = self.agent_store_dir / agent_id / agent_config.get("executable", "")
+                        if agent_path.exists():
+                            agent_path.unlink()
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Removed {agent_id}")
+                        else:
+                            # Download it
+                            release_url = agent_config.get("release_url", "")
+                            if release_url:
+                                agent_path.parent.mkdir(parents=True, exist_ok=True)
+                                try:
+                                    with urllib.request.urlopen(release_url) as response:
+                                        agent_path.write_bytes(response.read())
+                                        agent_path.chmod(0o755)
+                                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {agent_id}")
+                                except Exception as e:
+                                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {agent_id}: {e}")
+                    else:
+                        print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid number")
+                except ValueError:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid input")
+
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to manage agents: {e}")
+
+    def _manage_apps(self):
+        """Add or remove apps from the app store"""
+        try:
+            app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
+            try:
+                with urllib.request.urlopen(app_registry_url) as response:
+                    registry = yaml.safe_load(response.read())
+            except Exception as e:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Could not fetch app registry: {e}")
+                return
+
+            apps = registry.get("apps", {})
+
+            while True:
+                print(f"\n{Colors.CYAN}{Colors.BOLD}Apps:{Colors.RESET}\n")
+                app_list = list(apps.items())
+                for idx, (app_id, app_config) in enumerate(app_list, 1):
+                    installed = (self.app_store_dir / app_id).exists() and any((self.app_store_dir / app_id).iterdir())
+                    required = app_id in self.REQUIRED_APPS
+                    status = f"{Colors.GREEN}[INSTALLED]{Colors.RESET}" if installed else f"{Colors.RED}[NOT INSTALLED]{Colors.RESET}"
+                    lock = f" {Colors.YELLOW}[REQUIRED]{Colors.RESET}" if required else ""
+                    print(f"{idx}. {app_id} {status}{lock}")
+
+                print(f"\n{Colors.CYAN}Enter app number to install/remove, or 0 to go back:{Colors.RESET}")
+                choice = input("> ").strip()
+                if choice == '0':
+                    break
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(app_list):
+                        app_id, app_config = app_list[idx]
+                        if app_id in self.REQUIRED_APPS:
+                            print(f"{Colors.YELLOW}[PROTECTED]{Colors.RESET} {app_id} is required for memory and cannot be removed")
+                            continue
+                        app_dir = self.app_store_dir / app_id
+                        if app_dir.exists() and any(app_dir.iterdir()):
+                            import shutil
+                            shutil.rmtree(app_dir)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Removed {app_id}")
+                        else:
+                            # Download it
+                            repo_url = app_config.get("repo_url", "")
+                            folder_path = app_config.get("folder_path", "")
+                            executable = app_config.get("executable", "")
+                            if repo_url and folder_path and executable:
+                                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                                app_dir.mkdir(parents=True, exist_ok=True)
+                                app_path = app_dir / executable.split("/")[-1]
+                                try:
+                                    with urllib.request.urlopen(raw_base + executable) as response:
+                                        app_path.write_bytes(response.read())
+                                        app_path.chmod(0o755)
+                                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {app_id}")
+                                except Exception as e:
+                                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {app_id}: {e}")
+                    else:
+                        print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid number")
+                except ValueError:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid input")
+
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to manage apps: {e}")
+
+    def _manage_mcp_skills(self):
+        """Add or remove MCP skills"""
+        try:
+            if not self.skills_registry_path.exists():
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} skills.yaml not found")
                 return
-            
-            skills_data = yaml.safe_load(skills_registry_path.read_text())
-            skills = skills_data.get("skills", {})
-            
-            print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Skills:{Colors.RESET}\n")
-            skill_list = list(skills.items())
-            for idx, (skill_id, skill_config) in enumerate(skill_list, 1):
-                enabled = skill_config.get("enabled", False)
-                status = f"{Colors.GREEN}[ENABLED]{Colors.RESET}" if enabled else f"{Colors.RED}[DISABLED]{Colors.RESET}"
-                print(f"{idx}. {skill_id} {status}")
-            
-            print(f"\n{Colors.CYAN}Enter skill number to toggle, or 0 to go back:{Colors.RESET}")
-            choice = input("> ").strip()
-            
-            if choice == '0':
-                return
-            
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(skill_list):
-                    skill_id, skill_config = skill_list[idx]
-                    current_state = skill_config.get("enabled", False)
-                    skills_data["skills"][skill_id]["enabled"] = not current_state
-                    skills_registry_path.write_text(json.dumps(skills_data, indent=2))
-                    new_state = "enabled" if not current_state else "disabled"
-                    print(f"{Colors.GREEN}[✓]{Colors.RESET} {skill_id} {new_state}")
-                else:
-                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid skill number")
-            except ValueError:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid input")
-        
+
+            registry = yaml.safe_load(self.skills_registry_path.read_text())
+            skills = registry.get("skills", {})
+
+            while True:
+                print(f"\n{Colors.CYAN}{Colors.BOLD}MCP Skills:{Colors.RESET}\n")
+                skill_list = list(skills.items())
+                for idx, (skill_id, skill_config) in enumerate(skill_list, 1):
+                    skill_dir = self.mcp_store_dir / skill_id
+                    installed = skill_dir.exists() and any(skill_dir.glob("*.mcp"))
+                    status = f"{Colors.GREEN}[INSTALLED]{Colors.RESET}" if installed else f"{Colors.RED}[NOT INSTALLED]{Colors.RESET}"
+                    print(f"{idx}. {skill_id} {status}")
+
+                print(f"\n{Colors.CYAN}Enter skill number to install/remove, or 0 to go back:{Colors.RESET}")
+                choice = input("> ").strip()
+                if choice == '0':
+                    break
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(skill_list):
+                        skill_id, skill_config = skill_list[idx]
+                        skill_dir = self.mcp_store_dir / skill_id
+                        installed = skill_dir.exists() and any(skill_dir.glob("*.mcp"))
+                        if installed:
+                            import shutil
+                            shutil.rmtree(skill_dir)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Removed {skill_id}")
+                        else:
+                            repo_url = skill_config.get("repo_url", "")
+                            folder_path = skill_config.get("folder_path", "")
+                            executable = skill_config.get("executable", "")
+                            release_url = skill_config.get("release_url", "")
+                            if release_url or (repo_url and folder_path and executable):
+                                skill_dir.mkdir(parents=True, exist_ok=True)
+                                if release_url:
+                                    skill_url = release_url
+                                else:
+                                    raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                                    skill_url = raw_base + executable
+                                skill_path = skill_dir / (executable or "skill").split("/")[-1]
+                                try:
+                                    with urllib.request.urlopen(skill_url) as response:
+                                        skill_path.write_bytes(response.read())
+                                        skill_path.chmod(0o755)
+                                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {skill_id}")
+                                except Exception as e:
+                                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {skill_id}: {e}")
+                    else:
+                        print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid number")
+                except ValueError:
+                    print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Invalid input")
+
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to manage skills: {e}")
     
@@ -1305,34 +1453,34 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading skills: {e}")
     
     def download_enabled_apps(self):
-        """Download all enabled apps from app.yaml"""
+        """Download only required apps (chromadb) on first run"""
         try:
             app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
-            
+
             with urllib.request.urlopen(app_registry_url) as response:
                 registry = yaml.safe_load(response.read())
-            
+
             apps = registry.get("apps", {})
-            
+
             for app_id, app_config in apps.items():
-                if not app_config.get("enabled", False):
+                # Only auto-download required apps on first run
+                if app_id not in self.REQUIRED_APPS:
                     continue
-                
+
                 app_dir = self.app_store_dir / app_id
                 app_dir.mkdir(exist_ok=True)
-                
+
                 repo_url = app_config.get("repo_url", "")
                 folder_path = app_config.get("folder_path", "")
                 executable = app_config.get("executable", "")
                 config = app_config.get("config", "")
                 config_path = app_config.get("config_path", "")
-                
+
                 if not repo_url or not folder_path or not executable:
                     continue
-                
+
                 raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
-                
-                # Download app executable
+
                 app_path = app_dir / executable.split("/")[-1]
                 try:
                     with urllib.request.urlopen(raw_base + executable) as response:
@@ -1341,8 +1489,7 @@ class DecyphertekCLI:
                         print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
                 except Exception as e:
                     print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
-                
-                # Download config to configs directory if specified
+
                 if config and config_path:
                     config_dir = Path(config_path.replace("~", str(Path.home())))
                     config_dir.mkdir(parents=True, exist_ok=True)
@@ -1351,9 +1498,9 @@ class DecyphertekCLI:
                         with urllib.request.urlopen(raw_base + config) as response:
                             config_file_path.write_bytes(response.read())
                             print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
-                    except:
+                    except Exception:
                         pass
-        
+
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading apps: {e}")
     
