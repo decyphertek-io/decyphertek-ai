@@ -1170,16 +1170,22 @@ class DecyphertekCLI:
                 repo_url = agent_config.get("repo_url", "")
                 folder_path = agent_config.get("folder_path", "")
                 executable = agent_config.get("executable", "")
+                release_url = agent_config.get("release_url", "")
                 
                 if not repo_url or not folder_path or not executable:
                     continue
                 
-                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                # Use release_url if available, otherwise fall back to raw GitHub URL
+                if release_url:
+                    agent_url = release_url
+                else:
+                    raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                    agent_url = raw_base + executable
                 
                 # Download agent executable
                 agent_path = agent_dir / executable.split("/")[-1]
                 try:
-                    with urllib.request.urlopen(raw_base + executable) as response:
+                    with urllib.request.urlopen(agent_url) as response:
                         agent_path.write_bytes(response.read())
                         agent_path.chmod(0o755)
                         print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
