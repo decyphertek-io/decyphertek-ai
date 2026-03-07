@@ -11,8 +11,9 @@ import urllib.request
 import readline
 import glob
 from pathlib import Path
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 import base64
 
@@ -50,8 +51,9 @@ class DecyphertekCLI:
         self.mcp_store_dir = self.app_dir / "mcp-store"
         self.app_store_dir = self.app_dir / "app-store"
         self.keys_dir = self.app_dir / "keys"
-        self.ssh_key_path = self.keys_dir / "decyphertek.ai.pem"
+        self.salt_path = self.keys_dir / "salt.bin"
         self.password_file = self.app_dir / ".password_hash"
+        self._fernet: Fernet = None  # set after authenticate()
         
         # Configs directory in user home
         self.configs_dir = self.app_dir / "configs"
@@ -1078,41 +1080,36 @@ class DecyphertekCLI:
             else:
                 print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Passwords don't match. Try again.")
         
-        # Generate RSA key pair in PEM format for credential encryption
-        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating RSA key for credential encryption...")
-        if not self.ssh_key_path.exists():
-            try:
-                # Generate private key in PEM format
-                subprocess.run([
-                    "openssl", "genrsa",
-                    "-out", str(self.ssh_key_path),
-                    "4096"
-                ], check=True, capture_output=True)
-                
-                # Generate public key
-                subprocess.run([
-                    "openssl", "rsa",
-                    "-in", str(self.ssh_key_path),
-                    "-pubout",
-                    "-out", str(self.ssh_key_path).replace('.ai.pem', '.ai.pub')
-                ], check=True, capture_output=True)
-                
-                # Set permissions
-                self.ssh_key_path.chmod(0o600)
-                
-                pub_key_path = str(self.ssh_key_path).replace('.ai.pem', '.ai.pub')
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Private key: {self.ssh_key_path}")
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Public key: {pub_key_path}")
-                print()
-            except subprocess.CalledProcessError as e:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to generate RSA key: {e}")
-                sys.exit(1)
+        # Generate encryption salt for Fernet key derivation
+        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating encryption salt...")
+        if not self.salt_path.exists():
+            self.keys_dir.mkdir(parents=True, exist_ok=True)
+            salt = os.urandom(16)
+            self.salt_path.write_bytes(salt)
+            self.salt_path.chmod(0o600)
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Encryption salt: {self.salt_path}")
+            print()
+        # Derive Fernet key from password so credentials can be stored immediately
+        self._fernet = self._derive_fernet(password)
         
         # Download all enabled agents, skills, and apps (only on first run)
         self.download_all_stores()
     
+    def _derive_fernet(self, password: str) -> Fernet:
+        """Derive a Fernet key from the master password + stored salt"""
+        salt = self.salt_path.read_bytes()
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=480000,
+            backend=default_backend()
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        return Fernet(key)
+
     def authenticate(self):
-        """Authenticate user with password"""
+        """Authenticate user with password and derive encryption key"""
         stored_hash = self.password_file.read_text().strip()
         print(f"\n{Colors.CYAN}{Colors.BOLD}=== DECYPHERTEK.AI LOGIN ==={Colors.RESET}\n")
         
@@ -1121,6 +1118,7 @@ class DecyphertekCLI:
             password_hash = hashlib.sha256(password.encode()).hexdigest()
             
             if password_hash == stored_hash:
+                self._fernet = self._derive_fernet(password)
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Authentication successful\n")
                 return True
             else:
@@ -1165,34 +1163,16 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error checking credentials: {e}")
     
     def store_credential(self, service: str, credential: str):
-        """Encrypt and store a credential"""
+        """Encrypt and store a credential using Fernet (AES-128)"""
         try:
-            # Public key path (decyphertek.pub)
-            pub_key_path = Path(str(self.ssh_key_path).replace('.ai.pem', '.ai.pub'))
-            
-            # Check if public key exists
-            if not pub_key_path.exists():
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Public key not found: {pub_key_path}")
+            if self._fernet is None:
+                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Not authenticated — cannot encrypt credential")
                 return False
-            
-            # Encrypt credential with OpenSSL public key
-            result = subprocess.run(
-                ["openssl", "pkeyutl", "-encrypt", "-pubin", "-inkey", str(pub_key_path)],
-                input=credential.encode(),
-                capture_output=True,
-                text=False
-            )
-            
-            if result.returncode != 0:
-                print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Encryption failed")
-                print(f"{Colors.BLUE}[DEBUG]{Colors.RESET} stderr: {result.stderr.decode()}")
-                return False
-            
+            encrypted = self._fernet.encrypt(credential.encode())
             cred_file = self.creds_dir / f"{service}.enc"
-            cred_file.write_bytes(result.stdout)
+            cred_file.write_bytes(encrypted)
             cred_file.chmod(0o600)
             return True
-        
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store credential: {e}")
             return False
@@ -1416,47 +1396,15 @@ class DecyphertekCLI:
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
     
-    def encrypt_credential(self, credential):
-        """Encrypt credential using SSH public key"""
-        with open(f"{self.ssh_key_path}.pub", 'rb') as key_file:
-            public_key = serialization.load_ssh_public_key(
-                key_file.read(),
-                backend=default_backend()
-            )
-        
-        encrypted = public_key.encrypt(
-            credential.encode(),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return base64.b64encode(encrypted).decode()
-    
     def decrypt_credential(self, credential_name):
-        """Decrypt credential using SSH private key via OpenSSL"""
-        try:
-            # Read encrypted content from file
-            cred_file = self.creds_dir / f"{credential_name}.enc"
-            if not cred_file.exists():
-                raise Exception(f"Credential file not found: {cred_file}")
-            encrypted_bytes = cred_file.read_bytes()
-            
-            # Use OpenSSL to decrypt with SSH private key
-            result = subprocess.run(
-                ["openssl", "pkeyutl", "-decrypt", "-inkey", str(self.ssh_key_path)],
-                input=encrypted_bytes,
-                capture_output=True,
-                text=False
-            )
-            
-            if result.returncode != 0:
-                raise Exception(f"OpenSSL decryption failed: {result.stderr.decode()}")
-            
-            return result.stdout.decode()
-        except Exception as e:
-            raise Exception(f"Decryption error: {str(e)}")
+        """Decrypt credential using Fernet (AES-128)"""
+        if self._fernet is None:
+            raise Exception("Not authenticated — cannot decrypt credential")
+        cred_file = self.creds_dir / f"{credential_name}.enc"
+        if not cred_file.exists():
+            raise Exception(f"Credential file not found: {cred_file}")
+        encrypted_bytes = cred_file.read_bytes()
+        return self._fernet.decrypt(encrypted_bytes).decode()
 
 
 def main():
