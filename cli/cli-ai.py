@@ -133,7 +133,7 @@ class DecyphertekCLI:
         
     def interactive_mode(self):
         # Setup tab completion
-        readline.set_completer_delims(' \t\n')
+        readline.set_completer_delims(' \t\n;|&')
         readline.parse_and_bind('tab: complete')
         readline.set_completer(self._completer)
         
@@ -159,15 +159,48 @@ class DecyphertekCLI:
             except EOFError:
                 break
     
+    def _get_path_executables(self):
+        """Return all executable names found in $PATH directories (cached)."""
+        if not hasattr(self, '_path_executables_cache'):
+            execs = set()
+            for d in os.environ.get('PATH', '').split(':'):
+                try:
+                    for f in os.listdir(d):
+                        fp = os.path.join(d, f)
+                        if os.access(fp, os.X_OK) and os.path.isfile(fp):
+                            execs.add(f)
+                except OSError:
+                    pass
+            self._path_executables_cache = sorted(execs)
+        return self._path_executables_cache
+
     def _completer(self, text, state):
-        """Tab completion for paths and slash commands"""
+        """Tab completion for paths, shell commands, and slash commands"""
         try:
             line = readline.get_line_buffer()
             
             # Complete slash commands
-            if line.startswith('/'):
+            if line.startswith('/') and not os.path.exists(line.split()[0]):
                 commands = ['/chat ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
+                # Also add dynamic slash commands from slash-commands.yaml
+                try:
+                    if self.slash_commands_path.exists():
+                        slash_config = yaml.safe_load(self.slash_commands_path.read_text())
+                        for cmd in slash_config.get("commands", {}).keys():
+                            commands.append(cmd + ' ')
+                except Exception:
+                    pass
                 matches = [cmd for cmd in commands if cmd.startswith(line)]
+                if state < len(matches):
+                    return matches[state]
+                return None
+            
+            # If we're completing the first word (command name), complete from PATH
+            tokens = line.split()
+            completing_command = len(tokens) == 0 or (len(tokens) == 1 and not line.endswith(' '))
+            if completing_command and not text.startswith('.') and not text.startswith('/') and not text.startswith('~'):
+                execs = self._get_path_executables()
+                matches = [e for e in execs if e.startswith(text)]
                 if state < len(matches):
                     return matches[state]
                 return None
@@ -177,6 +210,7 @@ class DecyphertekCLI:
                 text = ''
             
             # Handle ~ expansion
+            orig_text = text
             if text.startswith('~'):
                 text = str(Path.home()) + text[1:]
             
@@ -190,7 +224,7 @@ class DecyphertekCLI:
             matches = glob.glob(search_path + '*')
             
             # Convert back to relative paths if needed
-            if not text.startswith('/'):
+            if not orig_text.startswith('/') and not orig_text.startswith('~'):
                 matches = [os.path.relpath(m, self.current_dir) for m in matches]
             
             # Add trailing slash for directories
@@ -199,7 +233,7 @@ class DecyphertekCLI:
             if state < len(matches):
                 return matches[state]
             return None
-        except:
+        except Exception:
             return None
     
     def process_input(self, user_input):
@@ -261,12 +295,21 @@ class DecyphertekCLI:
             # Execute as Linux shell command
             self.execute_shell_command(user_input)
     
+    # Commands that require a full interactive TTY (no output capture)
+    _INTERACTIVE_COMMANDS = {
+        'vim', 'vi', 'nano', 'emacs', 'less', 'more', 'man', 'top', 'htop',
+        'ssh', 'ftp', 'sftp', 'telnet', 'mysql', 'psql', 'python', 'python3',
+        'ipython', 'node', 'irb', 'bash', 'sh', 'zsh', 'fish', 'watch',
+        'screen', 'tmux', 'mc', 'ranger', 'ncdu', 'cmus', 'mutt',
+    }
+
     def execute_shell_command(self, command):
         """Execute a shell command and display output"""
         try:
             # Handle cd command specially to maintain directory state
-            if command.strip().startswith('cd '):
-                new_dir = command.strip()[3:].strip()
+            stripped = command.strip()
+            if stripped == 'cd' or stripped.startswith('cd ') or stripped.startswith('cd\t'):
+                new_dir = stripped[2:].strip() if len(stripped) > 2 else ''
                 if not new_dir:
                     self.current_dir = str(self.home_dir)
                 else:
@@ -282,26 +325,39 @@ class DecyphertekCLI:
                     else:
                         print(f"{Colors.BLUE}[ERROR]{Colors.RESET} cd: {new_dir}: No such file or directory")
                 return
-            
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                cwd=self.current_dir
-            )
-            
-            if result.stdout:
-                print(result.stdout, end='')
-            if result.stderr:
-                print(f"{Colors.BLUE}{result.stderr}{Colors.RESET}", end='')
-            
-            if result.returncode != 0 and not result.stderr:
-                print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command exited with code {result.returncode}")
+
+            # Determine if the command is interactive (needs a real TTY)
+            base_cmd = stripped.split()[0] if stripped.split() else ''
+            is_interactive = base_cmd in self._INTERACTIVE_COMMANDS
+
+            if is_interactive:
+                # Run interactively — inherit stdin/stdout/stderr so the full
+                # terminal UI works (cursor movement, colour, input, etc.)
+                subprocess.run(
+                    command,
+                    shell=True,
+                    cwd=self.current_dir,
+                )
+            else:
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=self.current_dir
+                )
+                
+                if result.stdout:
+                    print(result.stdout, end='')
+                if result.stderr:
+                    print(result.stderr, end='')
+                
+                if result.returncode != 0 and not result.stdout and not result.stderr:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command exited with code {result.returncode}")
         
         except subprocess.TimeoutExpired:
-            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out")
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out after 60 seconds")
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
 
