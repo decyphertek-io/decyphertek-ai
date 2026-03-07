@@ -1,0 +1,19 @@
+# Build artifacts
+#dist/
+build/
+*.spec
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# PyInstaller
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
