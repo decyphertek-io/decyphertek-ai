@@ -324,10 +324,37 @@ class DecyphertekCLI:
         except (KeyboardInterrupt, EOFError):
             return ""
 
+    def _build_agent_env(self) -> dict:
+        """Build an environment dict with decrypted OpenRouter credentials injected."""
+        env = os.environ.copy()
+        env["DECYPHERTEK_CONFIGS_DIR"]    = str(self.configs_dir)
+        env["DECYPHERTEK_AI_CONFIG"]      = str(self.ai_config_path)
+        env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
+        env["DECYPHERTEK_MCP_STORE"]      = str(self.mcp_store_dir)
+        env["DECYPHERTEK_AGENT_STORE"]    = str(self.agent_store_dir)
+        try:
+            openrouter_cred = self.creds_dir / "openrouter.enc"
+            if openrouter_cred.exists():
+                key = self.decrypt_credential("openrouter")
+                if key:
+                    env["OPENROUTER_API_KEY"] = key
+            if self.ai_config_path.exists():
+                ai_config = yaml.safe_load(self.ai_config_path.read_text())
+                provider = ai_config.get("providers", {}).get("openrouter-ai", {})
+                if provider.get("default_model"):
+                    env["OPENROUTER_MODEL"] = provider["default_model"]
+                if provider.get("base_url"):
+                    env["OPENROUTER_BASE_URL"] = provider["base_url"]
+        except Exception:
+            pass
+        return env
+
     def _run_builder_in_background(self, agent_path: str, spec: dict, label: str):
         """Run a builder agent binary in a background thread, print result when done."""
         import threading
         import json as _json
+
+        env = self._build_agent_env()
 
         def _run():
             try:
@@ -341,6 +368,7 @@ class DecyphertekCLI:
                     capture_output=True,
                     text=True,
                     timeout=300,
+                    env=env,
                 )
                 output = result.stdout.strip() or result.stderr.strip()
                 print(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n")
@@ -506,15 +534,8 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} No executable found in {skill_dir}")
             return
 
-        # Build environment with decrypted credentials
-        env = os.environ.copy()
-
-        # Pass config paths explicitly so the skill/agent can find yaml configs
-        env["DECYPHERTEK_CONFIGS_DIR"] = str(self.configs_dir)
-        env["DECYPHERTEK_AI_CONFIG"] = str(self.ai_config_path)
-        env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
-        env["DECYPHERTEK_MCP_STORE"] = str(self.mcp_store_dir)
-        env["DECYPHERTEK_AGENT_STORE"] = str(self.agent_store_dir)
+        # Build environment with decrypted credentials (OpenRouter key + config paths included)
+        env = self._build_agent_env()
 
         # Decrypt skill credentials if available
         if self.skills_registry_path.exists():
@@ -626,16 +647,9 @@ class DecyphertekCLI:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} No executable found for skill: {skill_name}")
                 return None
             
-            # Prepare environment with decrypted API keys
-            env = os.environ.copy()
+            # Build environment with OpenRouter key + config paths already included
+            env = self._build_agent_env()
 
-            # Pass config paths explicitly
-            env["DECYPHERTEK_CONFIGS_DIR"] = str(self.configs_dir)
-            env["DECYPHERTEK_AI_CONFIG"] = str(self.ai_config_path)
-            env["DECYPHERTEK_SLASH_COMMANDS"] = str(self.slash_commands_path)
-            env["DECYPHERTEK_MCP_STORE"] = str(self.mcp_store_dir)
-            env["DECYPHERTEK_AGENT_STORE"] = str(self.agent_store_dir)
-            
             # Dynamically decrypt MCP skill credentials from skills.yaml
             if self.skills_registry_path.exists():
                 skills_config = yaml.safe_load(self.skills_registry_path.read_text())
