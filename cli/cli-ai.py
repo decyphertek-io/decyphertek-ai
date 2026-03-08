@@ -320,7 +320,8 @@ class DecyphertekCLI:
     def _prompt(self, question: str) -> str:
         """Prompt the user for input, restoring readline after."""
         try:
-            return input(f"{Colors.CYAN}{question}{Colors.RESET} ").strip()
+            print(f"{Colors.CYAN}{question}{Colors.RESET} ", end="", flush=True)
+            return input("").strip()
         except (KeyboardInterrupt, EOFError):
             return ""
 
@@ -371,7 +372,8 @@ class DecyphertekCLI:
                     env=env,
                 )
                 output = result.stdout.strip() or result.stderr.strip()
-                print(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n")
+                print(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n", flush=True)
+                print(f"{Colors.CYAN}decyphertek.ai:~${Colors.RESET} ", end="", flush=True)
             except subprocess.TimeoutExpired:
                 print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Timed out after 5 minutes\n")
             except Exception as e:
