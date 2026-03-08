@@ -360,8 +360,10 @@ class DecyphertekCLI:
         def _run():
             try:
                 if not Path(agent_path).exists():
-                    print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Builder not found: {agent_path}")
-                    print(f"{Colors.BLUE}[{label}]{Colors.RESET} Download it with: /settings → Download agents")
+                    sys.stdout.write(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Builder not found: {agent_path}\n")
+                    sys.stdout.write(f"{Colors.BLUE}[{label}]{Colors.RESET} Download it with: /settings → Download agents\n")
+                    sys.stdout.flush()
+                    readline.redisplay()
                     return
                 result = subprocess.run(
                     [agent_path],
@@ -372,12 +374,17 @@ class DecyphertekCLI:
                     env=env,
                 )
                 output = result.stdout.strip() or result.stderr.strip()
-                print(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n", flush=True)
-                print(f"{Colors.CYAN}decyphertek.ai:~${Colors.RESET} ", end="", flush=True)
+                sys.stdout.write(f"\n{Colors.GREEN}[{label} DONE]{Colors.RESET} {output}\n\n")
+                sys.stdout.flush()
+                readline.redisplay()
             except subprocess.TimeoutExpired:
-                print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Timed out after 5 minutes\n")
+                sys.stdout.write(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Timed out after 5 minutes\n\n")
+                sys.stdout.flush()
+                readline.redisplay()
             except Exception as e:
-                print(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Error: {e}\n")
+                sys.stdout.write(f"\n{Colors.BLUE}[{label}]{Colors.RESET} Error: {e}\n\n")
+                sys.stdout.flush()
+                readline.redisplay()
 
         t = threading.Thread(target=_run, daemon=True)
         t.start()
