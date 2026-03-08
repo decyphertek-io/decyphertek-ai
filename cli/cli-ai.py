@@ -136,7 +136,7 @@ class DecyphertekCLI:
         
     def interactive_mode(self):
         # Setup tab completion
-        readline.set_completer_delims(' \t\n;|&')
+        readline.set_completer_delims(' \n;|&')
         readline.parse_and_bind('tab: complete')
         readline.set_completer(self._completer)
         
