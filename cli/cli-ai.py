@@ -452,6 +452,28 @@ class DecyphertekCLI:
             # Handle cd command specially to maintain directory state
             stripped = command.strip()
             if stripped == 'cd' or stripped.startswith('cd ') or stripped.startswith('cd\t'):
+                # Check for && chaining: "cd /some/path && some_command"
+                if '&&' in stripped:
+                    parts = stripped.split('&&', 1)
+                    cd_part = parts[0].strip()
+                    rest = parts[1].strip()
+                    # Execute the cd part first
+                    new_dir = cd_part[2:].strip() if len(cd_part) > 2 else ''
+                    if new_dir:
+                        if new_dir.startswith('~'):
+                            new_dir = str(Path.home() / new_dir[2:].lstrip('/'))
+                        elif not new_dir.startswith('/'):
+                            new_dir = str(Path(self.current_dir) / new_dir)
+                        if Path(new_dir).is_dir():
+                            self.current_dir = str(Path(new_dir).resolve())
+                        else:
+                            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} cd: {new_dir}: No such file or directory")
+                            return
+                    # Then execute the rest of the command in the new directory
+                    if rest:
+                        self.execute_shell_command(rest)
+                    return
+
                 new_dir = stripped[2:].strip() if len(stripped) > 2 else ''
                 if not new_dir:
                     self.current_dir = str(self.home_dir)
@@ -470,8 +492,14 @@ class DecyphertekCLI:
                 return
 
             # Determine if the command is interactive (needs a real TTY)
-            base_cmd = stripped.split()[0] if stripped.split() else ''
-            is_interactive = base_cmd in self._INTERACTIVE_COMMANDS
+            tokens = stripped.split()
+            base_cmd = tokens[0] if tokens else ''
+            # bash/sh/zsh are only interactive when invoked without a script argument
+            shell_cmds = {'bash', 'sh', 'zsh', 'fish'}
+            if base_cmd in shell_cmds and len(tokens) > 1:
+                is_interactive = False
+            else:
+                is_interactive = base_cmd in self._INTERACTIVE_COMMANDS
 
             if is_interactive:
                 # Run interactively — inherit stdin/stdout/stderr so the full
@@ -482,25 +510,25 @@ class DecyphertekCLI:
                     cwd=self.current_dir,
                 )
             else:
-                result = subprocess.run(
+                # Use a long timeout for build/install scripts; stream output line by line
+                proc = subprocess.Popen(
                     command,
                     shell=True,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=60,
-                    cwd=self.current_dir
+                    cwd=self.current_dir,
                 )
-                
-                if result.stdout:
-                    print(result.stdout, end='')
-                if result.stderr:
-                    print(result.stderr, end='')
-                
-                if result.returncode != 0 and not result.stdout and not result.stderr:
-                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command exited with code {result.returncode}")
+                for line in proc.stdout:
+                    print(line, end='', flush=True)
+                proc.wait()
+                result_returncode = proc.returncode
+                if result_returncode != 0:
+                    print(f"{Colors.BLUE}[SYSTEM]{Colors.RESET} Command exited with code {result_returncode}")
+                return
         
         except subprocess.TimeoutExpired:
-            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out after 60 seconds")
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Command timed out")
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
 
