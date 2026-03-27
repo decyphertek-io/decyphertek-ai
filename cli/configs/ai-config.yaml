@@ -12,8 +12,8 @@ default_provider: openrouter-ai
 
 agents:
   adminotaur:
-    model: openrouter/auto
+    model: openrouter/free
   agent-builder:
-    model: openrouter/auto
+    model: openrouter/free
   mcp-builder:
-    model: openrouter/auto
+    model: openrouter/free
