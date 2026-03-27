@@ -12,8 +12,8 @@ default_provider: openrouter-ai
 
 agents:
   adminotaur:
-    model: deepseek/deepseek-v3.2
+    model: openrouter/auto
   agent-builder:
-    model: deepseek/deepseek-v3.2
+    model: openrouter/auto
   mcp-builder:
-    model: deepseek/deepseek-v3.2
+    model: openrouter/auto
