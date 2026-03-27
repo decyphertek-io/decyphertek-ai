@@ -421,7 +421,7 @@ class DecyphertekCLI:
         self._run_builder_in_background(agent_path, spec, "agent-builder")
 
     def build_mcp(self):
-        """Interactive /build mcp flow"""
+        """Interactive /build mcp flow with build and enable steps."""
         print(f"\n{Colors.CYAN}=== Build MCP Skill ==={Colors.RESET}")
         name = self._prompt("Skill name?")
         if not name:
@@ -434,15 +434,202 @@ class DecyphertekCLI:
         api = self._prompt("What API does it call?")
         api_keys = self._prompt("Any API keys needed?")
 
+        skill_name = name.lower().replace(" ", "-")
         spec = {
-            "name": name.lower().replace(" ", "-"),
+            "name": skill_name,
             "purpose": purpose,
             "api": api,
             "api_keys": api_keys,
         }
 
-        agent_path = str(self.agent_store_dir / "mcp-builder" / "mcp-builder.agent")
-        self._run_builder_in_background(agent_path, spec, "mcp-builder")
+        # ── Step 1: Generate code via MCP Builder agent ──────────────────
+        agent_path = self.agent_store_dir / "mcp-builder" / "mcp-builder.agent"
+        if not agent_path.exists():
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} MCP Builder not found: {agent_path}")
+            print(f"{Colors.BLUE}[INFO]{Colors.RESET}  Download it with: /settings → Manage Agents")
+            return
+
+        print(f"\n{Colors.BLUE}[mcp-builder]{Colors.RESET} Generating MCP skill code...")
+        env = self._build_agent_env()
+        try:
+            result = subprocess.run(
+                [str(agent_path)],
+                input=json.dumps(spec),
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+            if result.returncode != 0 or "ERROR" in output:
+                print(f"{Colors.RED}[ERROR]{Colors.RESET} {output}")
+                return
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} {output}")
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} Code generation timed out after 5 minutes")
+            return
+        except Exception as e:
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} {e}")
+            return
+
+        output_dir = self.mcp_store_dir / "custom" / skill_name
+
+        # Verify files were generated
+        if not output_dir.exists() or not any(output_dir.iterdir()):
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} No files generated at {output_dir}")
+            return
+
+        # ── Step 2: Ask to build ─────────────────────────────────────────
+        build_script = output_dir / "build.sh"
+        if build_script.exists():
+            answer = self._prompt("Do you want to build the MCP server now? (Y/n)")
+            if answer.lower() in ("", "y", "yes"):
+                print(f"\n{Colors.BLUE}[BUILD]{Colors.RESET} Building {skill_name}...")
+                print(f"{Colors.DIM}  This runs build.sh in a virtual environment — may take a minute.{Colors.RESET}\n")
+                try:
+                    proc = subprocess.Popen(
+                        ["bash", str(build_script)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        cwd=str(output_dir),
+                        env=env,
+                    )
+                    for line in proc.stdout:
+                        print(f"  {line}", end='', flush=True)
+                    proc.wait()
+                    if proc.returncode == 0:
+                        print(f"\n{Colors.GREEN}[✓]{Colors.RESET} Build successful!")
+                    else:
+                        print(f"\n{Colors.RED}[ERROR]{Colors.RESET} Build failed (exit code {proc.returncode})")
+                        self._show_manual_build_instructions(skill_name, output_dir)
+                        return
+                except Exception as e:
+                    print(f"{Colors.RED}[ERROR]{Colors.RESET} Build error: {e}")
+                    self._show_manual_build_instructions(skill_name, output_dir)
+                    return
+            else:
+                self._show_manual_build_instructions(skill_name, output_dir)
+                # Still ask about enabling even if they skip the build
+        else:
+            print(f"{Colors.YELLOW}[WARNING]{Colors.RESET} No build.sh found — you'll need to build manually.")
+
+        # ── Step 3: Ask to enable ────────────────────────────────────────
+        answer = self._prompt("Do you want to enable this skill? (Y/n)")
+        if answer.lower() in ("", "y", "yes"):
+            self._enable_custom_mcp_skill(skill_name, purpose, api_keys)
+        else:
+            self._show_manual_enable_instructions(skill_name)
+
+    def _show_manual_build_instructions(self, skill_name: str, output_dir: Path):
+        """Show manual build instructions when user skips or build fails."""
+        print(f"\n{Colors.CYAN}Manual build instructions:{Colors.RESET}")
+        print(f"  cd {output_dir}")
+        print(f"  bash build.sh")
+        print(f"\n  This creates dist/{skill_name}.mcp")
+        print()
+
+    def _show_manual_enable_instructions(self, skill_name: str):
+        """Show manual enable instructions when user skips auto-enable."""
+        print(f"\n{Colors.CYAN}To enable manually:{Colors.RESET}")
+        print(f"  1. Copy the built .mcp file to ~/.decyphertek.ai/mcp-store/{skill_name}/")
+        print(f"  2. Add an entry to ~/.decyphertek.ai/mcp-store/skills.yaml")
+        print(f"  3. Add a slash command to ~/.decyphertek.ai/configs/slash-commands.yaml")
+        print()
+
+    def _enable_custom_mcp_skill(self, skill_name: str, description: str, api_keys: str):
+        """Register a custom MCP skill in skills.yaml and slash-commands.yaml."""
+        try:
+            # ── Install the built binary ─────────────────────────────────
+            custom_dir = self.mcp_store_dir / "custom" / skill_name
+            dist_dir = custom_dir / "dist"
+            mcp_file = dist_dir / f"{skill_name}.mcp"
+
+            install_dir = self.mcp_store_dir / skill_name
+            install_dir.mkdir(parents=True, exist_ok=True)
+
+            if mcp_file.exists():
+                import shutil
+                dest = install_dir / f"{skill_name}.mcp"
+                shutil.copy2(str(mcp_file), str(dest))
+                dest.chmod(0o755)
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {skill_name}.mcp to {install_dir}")
+            else:
+                # Binary not built yet — that's OK, just register it
+                print(f"{Colors.YELLOW}[NOTE]{Colors.RESET} Binary not found yet — registered but needs build first.")
+
+            # ── Add to skills.yaml ───────────────────────────────────────
+            if self.skills_registry_path.exists():
+                registry = yaml.safe_load(self.skills_registry_path.read_text()) or {}
+            else:
+                registry = {"skills": {}}
+
+            skills = registry.setdefault("skills", {})
+
+            # Determine credential/env mapping from api_keys hint
+            cred_name = ""
+            env_var = ""
+            if api_keys:
+                # Use a sanitized version of the api_keys hint as credential name
+                cred_name = skill_name.replace("-", "_")
+                env_var = f"{cred_name.upper()}_API_KEY"
+
+            skill_entry = {
+                "id": skill_name,
+                "version": "1.0.0",
+                "repo_url": "",
+                "folder_path": f"{skill_name}/",
+                "executable": f"{skill_name}.mcp",
+                "install_path": f"~/.decyphertek.ai/mcp-store/{skill_name}/",
+                "enabled": True,
+            }
+            if cred_name:
+                skill_entry["credentials"] = cred_name
+                skill_entry["env_mapping"] = env_var
+
+            skills[skill_name] = skill_entry
+            self.skills_registry_path.write_text(yaml.dump(registry, default_flow_style=False))
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Added {skill_name} to skills.yaml")
+
+            # ── Add slash command to slash-commands.yaml ──────────────────
+            if self.slash_commands_path.exists():
+                slash_config = yaml.safe_load(self.slash_commands_path.read_text()) or {}
+            else:
+                slash_config = {"commands": {}}
+
+            commands = slash_config.setdefault("commands", {})
+            cmd_name = f"/{skill_name}"
+            commands[cmd_name] = {
+                "name": skill_name,
+                "description": description or f"Use {skill_name} MCP skill",
+                "mcp_skill": skill_name,
+                "tools": ["query"],
+                "ai_provider": "openrouter-ai",
+                "enabled": True,
+            }
+            self.slash_commands_path.write_text(yaml.dump(slash_config, default_flow_style=False))
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Added {cmd_name} slash command")
+
+            # ── Prompt for API key if needed ──────────────────────────────
+            if cred_name:
+                cred_file = self.creds_dir / f"{cred_name}.enc"
+                if not cred_file.exists():
+                    answer = self._prompt(f"Add API key for {skill_name} now? (Y/n)")
+                    if answer.lower() in ("", "y", "yes"):
+                        try:
+                            api_key = getpass.getpass(f"Enter API key: ").strip()
+                            if api_key and self.store_credential(cred_name, api_key):
+                                print(f"{Colors.GREEN}[✓]{Colors.RESET} API key stored")
+                            else:
+                                print(f"{Colors.YELLOW}[SKIP]{Colors.RESET} No key stored — add later via /settings")
+                        except Exception:
+                            print(f"{Colors.YELLOW}[SKIP]{Colors.RESET} Could not store key — add later via /settings")
+
+            print(f"\n{Colors.GREEN}[✓]{Colors.RESET} {skill_name} is enabled! Use {cmd_name} <query> to try it.\n")
+
+        except Exception as e:
+            print(f"{Colors.RED}[ERROR]{Colors.RESET} Failed to enable skill: {e}")
+            self._show_manual_enable_instructions(skill_name)
 
     # Commands that require a full interactive TTY (no output capture)
     _INTERACTIVE_COMMANDS = {
