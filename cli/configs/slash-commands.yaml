@@ -44,6 +44,12 @@ commands:
     builtin: true
     enabled: true
 
+  /update:
+    name: update
+    description: Update all components — keeps configs, creds, and data safe
+    builtin: true
+    enabled: true
+
   /help:
     name: help
     description: Show available commands and system info

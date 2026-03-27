@@ -56,6 +56,9 @@ class DecyphertekCLI:
         self.password_file = self.app_dir / ".password_hash"
         self._fernet: Fernet = None  # set after authenticate()
         
+        # Local version manifest — tracks installed component versions
+        self.versions_path = self.app_dir / "versions.yaml"
+        
         # Configs directory in user home
         self.configs_dir = self.app_dir / "configs"
         self.ai_config_path = self.configs_dir / "ai-config.yaml"
@@ -184,7 +187,7 @@ class DecyphertekCLI:
             
             # Complete slash commands
             if line.startswith('/') and not os.path.exists(line.split()[0]):
-                commands = ['/build agent', '/build mcp', '/chat ', '/code ', '/help', '/status', '/config', '/health', '/settings', '/web ', '/rag ', '/news ']
+                commands = ['/build agent', '/build mcp', '/chat ', '/code ', '/help', '/status', '/config', '/health', '/settings', '/update', '/web ', '/rag ', '/news ']
                 # Also add dynamic slash commands from slash-commands.yaml
                 try:
                     if self.slash_commands_path.exists():
@@ -270,6 +273,9 @@ class DecyphertekCLI:
                 return
             elif command == '/settings':
                 self.show_settings()
+                return
+            elif command == '/update':
+                self.update()
                 return
             elif command == '/chat':
                 # Extract message after /chat
@@ -801,6 +807,7 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}/config{Colors.RESET}          - Show configuration")
         print(f"{Colors.GREEN}/health{Colors.RESET}          - Check system health and connectivity")
         print(f"{Colors.GREEN}/settings{Colors.RESET}        - Interactive settings menu")
+        print(f"{Colors.GREEN}/update{Colors.RESET}          - Update all components (keeps configs & data)")
         
         # Dynamically load MCP slash commands from slash-commands.yaml
         try:
@@ -1123,6 +1130,370 @@ class DecyphertekCLI:
         
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to change model: {e}")
+
+    # ── Version Tracking ─────────────────────────────────────────────────────
+
+    def _load_local_versions(self) -> dict:
+        """Load the local versions manifest (what's currently installed)."""
+        if self.versions_path.exists():
+            try:
+                return yaml.safe_load(self.versions_path.read_text()) or {}
+            except Exception:
+                pass
+        return {}
+
+    def _save_local_versions(self, versions: dict):
+        """Persist the local versions manifest."""
+        self.versions_path.write_text(yaml.dump(versions, default_flow_style=False))
+
+    def _version_newer(self, remote: str, local: str) -> bool:
+        """Return True if remote version is strictly newer than local version.
+        
+        Compares semantic version strings (e.g. '1.2.0' > '1.1.0').
+        Falls back to string comparison if parsing fails.
+        """
+        try:
+            def parse(v):
+                return tuple(int(x) for x in v.split('.'))
+            return parse(remote) > parse(local)
+        except Exception:
+            return remote != local
+
+    def _fetch_remote_yaml(self, url: str) -> dict | None:
+        """Download and parse a remote YAML file. Returns None on failure."""
+        try:
+            with urllib.request.urlopen(url) as response:
+                return yaml.safe_load(response.read())
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to fetch {url}: {e}")
+            return None
+
+    def _download_binary(self, url: str, dest: Path) -> bool:
+        """Download a binary file to dest. Returns True on success."""
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with urllib.request.urlopen(url) as response:
+                dest.write_bytes(response.read())
+            dest.chmod(0o755)
+            return True
+        except Exception as e:
+            print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Download failed: {e}")
+            return False
+
+    # ── /update Command ──────────────────────────────────────────────────────
+
+    def update(self):
+        """Check for updates and download newer components.
+        
+        Compares remote registry versions against local versions.yaml manifest.
+        Downloads only changed binaries. Preserves all user data:
+        - creds/ (encrypted API keys)
+        - keys/ (encryption salt)
+        - .password_hash
+        - configs/ (user-modified values kept, new keys merged)
+        - ChromaDB data
+        """
+        print(f"\n{Colors.CYAN}{Colors.BOLD}{'='*55}{Colors.RESET}")
+        print(f"{Colors.CYAN}{Colors.BOLD}  Decyphertek.ai — Update Check{Colors.RESET}")
+        print(f"{Colors.CYAN}{Colors.BOLD}{'='*55}{Colors.RESET}\n")
+
+        local_versions = self._load_local_versions()
+        updated_count = 0
+        skipped_count = 0
+        error_count = 0
+
+        # ── 1. Update CLI binary ─────────────────────────────────────────────
+        print(f"{Colors.CYAN}[1/4] Checking CLI binary...{Colors.RESET}")
+        updated, skipped, errors = self._update_cli(local_versions)
+        updated_count += updated
+        skipped_count += skipped
+        error_count += errors
+
+        # ── 2. Update agents from agent-store ────────────────────────────────
+        print(f"\n{Colors.CYAN}[2/4] Checking agents...{Colors.RESET}")
+        updated, skipped, errors = self._update_agents(local_versions)
+        updated_count += updated
+        skipped_count += skipped
+        error_count += errors
+
+        # ── 3. Update MCP skills from mcp-store ─────────────────────────────
+        print(f"\n{Colors.CYAN}[3/4] Checking MCP skills...{Colors.RESET}")
+        updated, skipped, errors = self._update_skills(local_versions)
+        updated_count += updated
+        skipped_count += skipped
+        error_count += errors
+
+        # ── 4. Update apps from app-store ────────────────────────────────────
+        print(f"\n{Colors.CYAN}[4/4] Checking apps...{Colors.RESET}")
+        updated, skipped, errors = self._update_apps(local_versions)
+        updated_count += updated
+        skipped_count += skipped
+        error_count += errors
+
+        # ── 5. Merge config files (add new keys, keep user values) ───────────
+        print(f"\n{Colors.CYAN}[+] Merging configs...{Colors.RESET}")
+        self._merge_configs()
+
+        # ── Save updated manifest ────────────────────────────────────────────
+        self._save_local_versions(local_versions)
+
+        # ── Summary ──────────────────────────────────────────────────────────
+        print(f"\n{Colors.CYAN}{Colors.BOLD}{'='*55}{Colors.RESET}")
+        print(f"  {Colors.GREEN}Updated: {updated_count}{Colors.RESET}  |  "
+              f"Up-to-date: {skipped_count}  |  "
+              f"{Colors.RED if error_count else ''}Errors: {error_count}{Colors.RESET}")
+        print(f"{Colors.CYAN}{Colors.BOLD}{'='*55}{Colors.RESET}\n")
+
+        if updated_count > 0:
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Update complete! All configs and data preserved.\n")
+        else:
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Everything is up to date.\n")
+
+    def _update_cli(self, local_versions: dict) -> tuple:
+        """Update the CLI binary itself. Returns (updated, skipped, errors)."""
+        cli_registry_url = "https://raw.githubusercontent.com/decyphertek-io/decyphertek-ai/main/version.yaml"
+        remote = self._fetch_remote_yaml(cli_registry_url)
+
+        if not remote:
+            print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} Could not fetch CLI version info")
+            return (0, 1, 0)
+
+        remote_version = remote.get("version", "")
+        local_version = local_versions.get("cli", "")
+
+        if not remote_version:
+            print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} No version field in remote CLI manifest")
+            return (0, 1, 0)
+
+        if local_version and not self._version_newer(remote_version, local_version):
+            print(f"  {Colors.GREEN}[✓]{Colors.RESET} CLI v{local_version} — up to date")
+            return (0, 1, 0)
+
+        download_url = remote.get("download_url",
+            "https://github.com/decyphertek-io/decyphertek-ai/releases/latest/download/decyphertek.ai")
+        cli_path = self.app_dir / "bin" / "decyphertek.ai"
+
+        print(f"  {Colors.BLUE}[↓]{Colors.RESET} CLI {local_version or '(new)'} → v{remote_version}")
+        if self._download_binary(download_url, cli_path):
+            local_versions["cli"] = remote_version
+            print(f"  {Colors.GREEN}[✓]{Colors.RESET} CLI updated to v{remote_version}")
+            return (1, 0, 0)
+        return (0, 0, 1)
+
+    def _update_agents(self, local_versions: dict) -> tuple:
+        """Update agents from the remote workers.yaml. Returns (updated, skipped, errors)."""
+        remote_registry = self._fetch_remote_yaml(self.workers_registry_url)
+        if not remote_registry:
+            print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} Could not fetch agent registry")
+            return (0, 1, 0)
+
+        # Also save the fresh registry locally
+        self.workers_registry_path.parent.mkdir(parents=True, exist_ok=True)
+        self.workers_registry_path.write_text(yaml.dump(remote_registry, default_flow_style=False))
+
+        agents = remote_registry.get("agents", {})
+        if "agents" not in local_versions:
+            local_versions["agents"] = {}
+
+        updated = 0; skipped = 0; errors = 0
+
+        for agent_id, agent_config in agents.items():
+            if not agent_config.get("enabled", False):
+                continue
+
+            remote_version = agent_config.get("version", "")
+            local_version = local_versions["agents"].get(agent_id, "")
+            executable = agent_config.get("executable", "")
+            release_url = agent_config.get("release_url", "")
+
+            if not remote_version or not release_url or not executable:
+                continue
+
+            if local_version and not self._version_newer(remote_version, local_version):
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {agent_id} v{local_version} — up to date")
+                skipped += 1
+                continue
+
+            agent_dir = self.agent_store_dir / agent_id
+            agent_path = agent_dir / executable.split("/")[-1]
+
+            print(f"  {Colors.BLUE}[↓]{Colors.RESET} {agent_id} {local_version or '(new)'} → v{remote_version}")
+            if self._download_binary(release_url, agent_path):
+                local_versions["agents"][agent_id] = remote_version
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {agent_id} updated to v{remote_version}")
+                updated += 1
+            else:
+                errors += 1
+
+        return (updated, skipped, errors)
+
+    def _update_skills(self, local_versions: dict) -> tuple:
+        """Update MCP skills from the remote skills.yaml. Returns (updated, skipped, errors)."""
+        remote_registry = self._fetch_remote_yaml(self.skills_registry_url)
+        if not remote_registry:
+            print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} Could not fetch skills registry")
+            return (0, 1, 0)
+
+        # Save fresh registry locally
+        self.skills_registry_path.parent.mkdir(parents=True, exist_ok=True)
+        self.skills_registry_path.write_text(yaml.dump(remote_registry, default_flow_style=False))
+
+        skills = remote_registry.get("skills", {})
+        if "skills" not in local_versions:
+            local_versions["skills"] = {}
+
+        updated = 0; skipped = 0; errors = 0
+
+        for skill_id, skill_config in skills.items():
+            if not skill_config.get("enabled", False):
+                continue
+
+            remote_version = skill_config.get("version", "")
+            local_version = local_versions["skills"].get(skill_id, "")
+            executable = skill_config.get("executable", "")
+            release_url = skill_config.get("release_url", "")
+
+            if not remote_version:
+                continue
+
+            if local_version and not self._version_newer(remote_version, local_version):
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {skill_id} v{local_version} — up to date")
+                skipped += 1
+                continue
+
+            # Use release_url if available, otherwise fall back to raw GitHub
+            if not release_url:
+                repo_url = skill_config.get("repo_url", "")
+                folder_path = skill_config.get("folder_path", "")
+                if repo_url and folder_path and executable:
+                    raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                    release_url = raw_base + executable
+                else:
+                    continue
+
+            skill_dir = self.mcp_store_dir / skill_id
+            skill_path = skill_dir / executable.split("/")[-1]
+
+            print(f"  {Colors.BLUE}[↓]{Colors.RESET} {skill_id} {local_version or '(new)'} → v{remote_version}")
+            if self._download_binary(release_url, skill_path):
+                local_versions["skills"][skill_id] = remote_version
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {skill_id} updated to v{remote_version}")
+                updated += 1
+            else:
+                errors += 1
+
+        return (updated, skipped, errors)
+
+    def _update_apps(self, local_versions: dict) -> tuple:
+        """Update apps from the remote app.yaml. Returns (updated, skipped, errors)."""
+        app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
+        remote_registry = self._fetch_remote_yaml(app_registry_url)
+        if not remote_registry:
+            print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} Could not fetch app registry")
+            return (0, 1, 0)
+
+        apps = remote_registry.get("apps", {})
+        if "apps" not in local_versions:
+            local_versions["apps"] = {}
+
+        updated = 0; skipped = 0; errors = 0
+
+        for app_id, app_config in apps.items():
+            if not app_config.get("enabled", False):
+                continue
+
+            remote_version = app_config.get("version", "")
+            local_version = local_versions["apps"].get(app_id, "")
+            executable = app_config.get("executable", "")
+            release_url = app_config.get("release_url", "")
+
+            if not remote_version:
+                continue
+
+            if local_version and not self._version_newer(remote_version, local_version):
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {app_id} v{local_version} — up to date")
+                skipped += 1
+                continue
+
+            # Use release_url if available, otherwise fall back to raw GitHub
+            if not release_url:
+                repo_url = app_config.get("repo_url", "")
+                folder_path = app_config.get("folder_path", "")
+                if repo_url and folder_path and executable:
+                    raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                    release_url = raw_base + executable
+                else:
+                    continue
+
+            app_dir = self.app_store_dir / app_id
+            app_path = app_dir / executable.split("/")[-1]
+
+            print(f"  {Colors.BLUE}[↓]{Colors.RESET} {app_id} {local_version or '(new)'} → v{remote_version}")
+            if self._download_binary(release_url, app_path):
+                local_versions["apps"][app_id] = remote_version
+                print(f"  {Colors.GREEN}[✓]{Colors.RESET} {app_id} updated to v{remote_version}")
+                updated += 1
+
+                # Also download config if one is specified and doesn't already exist
+                config_name = app_config.get("config", "")
+                config_dest = app_config.get("config_path", "")
+                if config_name and config_dest:
+                    config_dir = Path(config_dest.replace("~", str(Path.home())))
+                    config_file = config_dir / config_name
+                    if not config_file.exists():
+                        repo_url = app_config.get("repo_url", "")
+                        folder_path = app_config.get("folder_path", "")
+                        if repo_url and folder_path:
+                            raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                            try:
+                                config_dir.mkdir(parents=True, exist_ok=True)
+                                with urllib.request.urlopen(raw_base + config_name) as resp:
+                                    config_file.write_bytes(resp.read())
+                                print(f"  {Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config_name}")
+                            except Exception:
+                                pass
+            else:
+                errors += 1
+
+        return (updated, skipped, errors)
+
+    def _merge_configs(self):
+        """Merge remote config files: add new keys but never overwrite user values."""
+        config_files = ["ai-config.yaml", "slash-commands.yaml"]
+        
+        for config_file in config_files:
+            try:
+                url = self.configs_base_url + config_file
+                with urllib.request.urlopen(url) as response:
+                    remote_config = yaml.safe_load(response.read())
+                
+                local_path = self.configs_dir / config_file
+                if local_path.exists():
+                    local_config = yaml.safe_load(local_path.read_text()) or {}
+                    merged = self._deep_merge(remote_config, local_config)
+                    local_path.write_text(yaml.dump(merged, default_flow_style=False))
+                    print(f"  {Colors.GREEN}[✓]{Colors.RESET} Merged {config_file} (new keys added, your values kept)")
+                else:
+                    # No local file — just write the remote version
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    local_path.write_text(yaml.dump(remote_config, default_flow_style=False))
+                    print(f"  {Colors.GREEN}[✓]{Colors.RESET} Downloaded {config_file}")
+            except Exception as e:
+                print(f"  {Colors.YELLOW}[SKIP]{Colors.RESET} Could not merge {config_file}: {e}")
+
+    def _deep_merge(self, source: dict, override: dict) -> dict:
+        """Deep merge two dicts. Values in override take priority.
+        
+        Used to add new keys from the remote config without clobbering
+        user-modified values in the local config.
+        """
+        result = dict(source)
+        for key, val in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+                result[key] = self._deep_merge(result[key], val)
+            else:
+                result[key] = val
+        return result
     
     def show_health(self):
         """Check system health and connectivity"""
@@ -1452,7 +1823,62 @@ class DecyphertekCLI:
         
         # Download app-store items
         self.download_enabled_apps()
-    
+        
+        # Initialize versions manifest from what we just downloaded
+        self._init_versions_manifest()
+
+    def _init_versions_manifest(self):
+        """Create initial versions.yaml from the registries we just downloaded.
+        
+        Called once after first-run setup so /update knows what's installed.
+        """
+        versions = {"cli": self.version}
+
+        # Agents
+        versions["agents"] = {}
+        if self.workers_registry_path.exists():
+            try:
+                registry = yaml.safe_load(self.workers_registry_path.read_text())
+                for agent_id, cfg in registry.get("agents", {}).items():
+                    if cfg.get("enabled", False) and cfg.get("version"):
+                        agent_dir = self.agent_store_dir / agent_id
+                        executable = cfg.get("executable", "")
+                        agent_path = agent_dir / executable.split("/")[-1] if executable else None
+                        if agent_path and agent_path.exists():
+                            versions["agents"][agent_id] = cfg["version"]
+            except Exception:
+                pass
+
+        # Skills
+        versions["skills"] = {}
+        if self.skills_registry_path.exists():
+            try:
+                registry = yaml.safe_load(self.skills_registry_path.read_text())
+                for skill_id, cfg in registry.get("skills", {}).items():
+                    if cfg.get("enabled", False) and cfg.get("version"):
+                        skill_dir = self.mcp_store_dir / skill_id
+                        if skill_dir.exists() and any(skill_dir.iterdir()):
+                            versions["skills"][skill_id] = cfg["version"]
+            except Exception:
+                pass
+
+        # Apps
+        versions["apps"] = {}
+        try:
+            app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
+            with urllib.request.urlopen(app_registry_url) as response:
+                registry = yaml.safe_load(response.read())
+            for app_id, cfg in registry.get("apps", {}).items():
+                if cfg.get("enabled", False) and cfg.get("version"):
+                    app_dir = self.app_store_dir / app_id
+                    if app_dir.exists() and any(app_dir.iterdir()):
+                        versions["apps"][app_id] = cfg["version"]
+        except Exception:
+            pass
+
+        self._save_local_versions(versions)
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Versions manifest created")
+
     def download_enabled_agents(self):
         """Download all enabled agents from workers.yaml"""
         try:
