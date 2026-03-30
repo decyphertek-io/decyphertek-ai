@@ -1,11 +1,7 @@
 name: Build Decyphertek AI CLI
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'cli/**'
+  workflow_dispatch:
 
 jobs:
   build:
