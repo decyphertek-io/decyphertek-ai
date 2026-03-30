@@ -1,0 +1,72 @@
+name: Build Decyphertek AI CLI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cli/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get next version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh release list --repo ${{ github.repository }} --limit 50 \
+            | awk '{print $1}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "$LATEST" ]; then
+            NEXT="v1.0.0"
+          else
+            PATCH=$(echo "$LATEST" | awk -F. '{print $NF}')
+            BASE=$(echo "$LATEST" | awk -F. '{OFS="."; $NF=""; NF--; print}')
+            NEXT="${BASE}.$((PATCH+1))"
+          fi
+          echo "tag=$NEXT" >> $GITHUB_OUTPUT
+          echo "old=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build
+        working-directory: ./cli
+        run: |
+          set -e
+          uv venv --clear --python 3.12
+          source .venv/bin/activate
+          uv pip install pyinstaller cryptography pyyaml
+          rm -rf dist build *.spec
+          pyinstaller --onefile \
+            --name decyphertek.ai \
+            --clean \
+            cli-ai.py
+          rm -rf .venv build
+          find . -maxdepth 1 -name "*.spec" -delete
+
+      - name: Create new release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            cli/dist/decyphertek.ai \
+            --repo ${{ github.repository }} \
+            --title "Decyphertek AI CLI ${{ steps.version.outputs.tag }}" \
+            --notes "Used and managed by decyphertek-ai."
+
+      - name: Delete old release
+        if: ${{ steps.version.outputs.old != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${{ steps.version.outputs.old }}" \
+            --repo ${{ github.repository }} \
+            --yes \
+            --cleanup-tag
