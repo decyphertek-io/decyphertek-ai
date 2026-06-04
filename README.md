@@ -1,6 +1,6 @@
 # Decyphertek-AI 
 
-* CURRENTLY IN DEV
+* CURRENTLY IN DEV ; This is a side project to understand AI agents and how they work. Many things are not working yet. 
 
 ## Tech Stack
 - **LangGraph**: Agent orchestration and workflow management
