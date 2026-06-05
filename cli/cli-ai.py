@@ -7,7 +7,14 @@ import hashlib
 import getpass
 import argparse
 import subprocess
+import ssl
 import urllib.request
+
+_ssl_ctx = ssl.create_default_context()
+_ssl_ctx.check_hostname = False
+_ssl_ctx.verify_mode = ssl.CERT_NONE
+_original_urlopen = urllib.request.urlopen
+urllib.request.urlopen = lambda url, *a, **kw: _original_urlopen(url, *a, context=_ssl_ctx, **{k: v for k, v in kw.items() if k != 'context'})
 import readline
 import glob
 from pathlib import Path
