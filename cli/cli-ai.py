@@ -1122,9 +1122,8 @@ class DecyphertekCLI:
                             if release_url:
                                 agent_path.parent.mkdir(parents=True, exist_ok=True)
                                 try:
-                                    with urllib.request.urlopen(release_url) as response:
-                                        agent_path.write_bytes(response.read())
-                                        agent_path.chmod(0o755)
+                                    self._download_file(release_url, agent_path)
+                                    agent_path.chmod(0o755)
                                     print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {agent_id}")
                                 except Exception as e:
                                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {agent_id}: {e}")
@@ -1141,8 +1140,7 @@ class DecyphertekCLI:
         try:
             app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
             try:
-                with urllib.request.urlopen(app_registry_url) as response:
-                    registry = yaml.safe_load(response.read())
+                registry = yaml.safe_load(self._download_bytes(app_registry_url))
             except Exception as e:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Could not fetch app registry: {e}")
                 return
@@ -1185,9 +1183,8 @@ class DecyphertekCLI:
                                 app_dir.mkdir(parents=True, exist_ok=True)
                                 app_path = app_dir / executable.split("/")[-1]
                                 try:
-                                    with urllib.request.urlopen(raw_base + executable) as response:
-                                        app_path.write_bytes(response.read())
-                                        app_path.chmod(0o755)
+                                    self._download_file(raw_base + executable, app_path)
+                                    app_path.chmod(0o755)
                                     print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {app_id}")
                                 except Exception as e:
                                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {app_id}: {e}")
@@ -1246,9 +1243,8 @@ class DecyphertekCLI:
                                     skill_url = raw_base + executable
                                 skill_path = skill_dir / (executable or "skill").split("/")[-1]
                                 try:
-                                    with urllib.request.urlopen(skill_url) as response:
-                                        skill_path.write_bytes(response.read())
-                                        skill_path.chmod(0o755)
+                                    self._download_file(skill_url, skill_path)
+                                    skill_path.chmod(0o755)
                                     print(f"{Colors.GREEN}[✓]{Colors.RESET} Installed {skill_id}")
                                 except Exception as e:
                                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to download {skill_id}: {e}")
@@ -1380,8 +1376,7 @@ class DecyphertekCLI:
     def _fetch_remote_yaml(self, url: str) -> dict | None:
         """Download and parse a remote YAML file. Returns None on failure."""
         try:
-            with urllib.request.urlopen(url) as response:
-                return yaml.safe_load(response.read())
+            return yaml.safe_load(self._download_bytes(url))
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to fetch {url}: {e}")
             return None
@@ -1390,8 +1385,7 @@ class DecyphertekCLI:
         """Download a binary file to dest. Returns True on success."""
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            with urllib.request.urlopen(url) as response:
-                dest.write_bytes(response.read())
+            self._download_file(url, dest)
             dest.chmod(0o755)
             return True
         except Exception as e:
@@ -1665,8 +1659,7 @@ class DecyphertekCLI:
                             raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
                             try:
                                 config_dir.mkdir(parents=True, exist_ok=True)
-                                with urllib.request.urlopen(raw_base + config_name) as resp:
-                                    config_file.write_bytes(resp.read())
+                                self._download_file(raw_base + config_name, config_file)
                                 print(f"  {Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config_name}")
                             except Exception:
                                 pass
@@ -1682,8 +1675,7 @@ class DecyphertekCLI:
         for config_file in config_files:
             try:
                 url = self.configs_base_url + config_file
-                with urllib.request.urlopen(url) as response:
-                    remote_config = yaml.safe_load(response.read())
+                remote_config = yaml.safe_load(self._download_bytes(url))
                 
                 local_path = self.configs_dir / config_file
                 if local_path.exists():
@@ -2010,6 +2002,37 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store credential: {e}")
             return False
     
+    def _download_bytes(self, url):
+        """Download URL and return raw bytes.
+
+        Uses system curl with LD_LIBRARY_PATH/LD_PRELOAD stripped to bypass the
+        PyInstaller-bundled libssl.so.3 that breaks TLS on GitHub release
+        redirects (objects.githubusercontent.com). Falls back to urllib if
+        curl is unavailable.
+        """
+        import subprocess, os, shutil
+        curl_bin = shutil.which("curl", path="/usr/bin:/bin:/usr/local/bin") or "/usr/bin/curl"
+        if os.path.exists(curl_bin):
+            env = os.environ.copy()
+            env.pop("LD_LIBRARY_PATH", None)
+            env.pop("LD_PRELOAD", None)
+            result = subprocess.run(
+                [curl_bin, "-fsSL", "--retry", "3", "--max-time", "60", url],
+                env=env, capture_output=True
+            )
+            if result.returncode == 0:
+                return result.stdout
+            raise RuntimeError(
+                f"curl exit {result.returncode}: {result.stderr.decode('utf-8', 'ignore').strip()}"
+            )
+        with urllib.request.urlopen(url) as response:
+            return response.read()
+
+    def _download_file(self, url, dest_path):
+        """Download URL to dest_path using the safe downloader."""
+        data = self._download_bytes(url)
+        Path(dest_path).write_bytes(data)
+
     def download_configs(self):
         """Download config files from GitHub"""
         config_files = ["ai-config.yaml", "slash-commands.yaml"]
@@ -2017,20 +2040,18 @@ class DecyphertekCLI:
         for config_file in config_files:
             try:
                 url = self.configs_base_url + config_file
-                with urllib.request.urlopen(url) as response:
-                    config_data = response.read()
-                    (self.configs_dir / config_file).write_bytes(config_data)
-                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded {config_file}")
+                config_data = self._download_bytes(url)
+                (self.configs_dir / config_file).write_bytes(config_data)
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded {config_file}")
             except Exception as e:
                 print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {config_file}: {e}")
     
     def download_workers_registry(self):
         """Download workers.yaml registry from agent-store"""
         try:
-            with urllib.request.urlopen(self.workers_registry_url) as response:
-                registry_data = response.read()
-                self.workers_registry_path.write_bytes(registry_data)
-                return True
+            registry_data = self._download_bytes(self.workers_registry_url)
+            self.workers_registry_path.write_bytes(registry_data)
+            return True
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download workers registry: {e}")
             return False
@@ -2038,10 +2059,9 @@ class DecyphertekCLI:
     def download_skills_registry(self):
         """Download skills.yaml registry from mcp-store"""
         try:
-            with urllib.request.urlopen(self.skills_registry_url) as response:
-                registry_data = response.read()
-                self.skills_registry_path.write_bytes(registry_data)
-                return True
+            registry_data = self._download_bytes(self.skills_registry_url)
+            self.skills_registry_path.write_bytes(registry_data)
+            return True
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download skills registry: {e}")
             return False
@@ -2103,8 +2123,7 @@ class DecyphertekCLI:
         versions["apps"] = {}
         try:
             app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
-            with urllib.request.urlopen(app_registry_url) as response:
-                registry = yaml.safe_load(response.read())
+            registry = yaml.safe_load(self._download_bytes(app_registry_url))
             for app_id, cfg in registry.get("apps", {}).items():
                 if cfg.get("enabled", False) and cfg.get("version"):
                     app_dir = self.app_store_dir / app_id
@@ -2147,10 +2166,9 @@ class DecyphertekCLI:
                 # Download agent executable
                 agent_path = agent_dir / executable.split("/")[-1]
                 try:
-                    with urllib.request.urlopen(agent_url) as response:
-                        agent_path.write_bytes(response.read())
-                        agent_path.chmod(0o755)
-                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
+                    self._download_file(agent_url, agent_path)
+                    agent_path.chmod(0o755)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded agent: {agent_id}")
                 except Exception as e:
                     print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {agent_id}: {e}")
         
@@ -2184,10 +2202,9 @@ class DecyphertekCLI:
 
                 skill_path = skill_dir / (executable or "skill").split("/")[-1]
                 try:
-                    with urllib.request.urlopen(release_url) as response:
-                        skill_path.write_bytes(response.read())
-                        skill_path.chmod(0o755)
-                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
+                    self._download_file(release_url, skill_path)
+                    skill_path.chmod(0o755)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
                 except Exception as e:
                     print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {skill_id}: {e}")
         
@@ -2199,8 +2216,7 @@ class DecyphertekCLI:
         try:
             app_registry_url = "https://raw.githubusercontent.com/decyphertek-io/app-store/main/app.yaml"
 
-            with urllib.request.urlopen(app_registry_url) as response:
-                registry = yaml.safe_load(response.read())
+            registry = yaml.safe_load(self._download_bytes(app_registry_url))
 
             apps = registry.get("apps", {})
 
@@ -2228,10 +2244,9 @@ class DecyphertekCLI:
 
                 app_path = app_dir / (executable or "app").split("/")[-1]
                 try:
-                    with urllib.request.urlopen(release_url) as response:
-                        app_path.write_bytes(response.read())
-                        app_path.chmod(0o755)
-                        print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
+                    self._download_file(release_url, app_path)
+                    app_path.chmod(0o755)
+                    print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
                 except Exception as e:
                     print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
 
@@ -2244,9 +2259,8 @@ class DecyphertekCLI:
                         config_dir.mkdir(parents=True, exist_ok=True)
                         config_file_path = config_dir / config
                         try:
-                            with urllib.request.urlopen(raw_base + config) as response:
-                                config_file_path.write_bytes(response.read())
-                                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
+                            self._download_file(raw_base + config, config_file_path)
+                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
                         except Exception:
                             pass
 
@@ -2283,11 +2297,10 @@ class DecyphertekCLI:
             else:
                 raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
                 agent_url = raw_base + executable
-            with urllib.request.urlopen(agent_url) as response:
-                agent_data = response.read()
-                self.adminotaur_agent_path.write_bytes(agent_data)
-                self.adminotaur_agent_path.chmod(0o755)
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {executable}")
+            agent_data = self._download_bytes(agent_url)
+            self.adminotaur_agent_path.write_bytes(agent_data)
+            self.adminotaur_agent_path.chmod(0o755)
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded: {executable}")
                 
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
