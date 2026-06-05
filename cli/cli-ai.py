@@ -2170,19 +2170,21 @@ class DecyphertekCLI:
                 skill_dir = self.mcp_store_dir / skill_id
                 skill_dir.mkdir(exist_ok=True)
                 
-                repo_url = skill_config.get("repo_url", "")
-                folder_path = skill_config.get("folder_path", "")
+                release_url = skill_config.get("release_url", "")
                 executable = skill_config.get("executable", "")
-                
-                if not repo_url or not folder_path or not executable:
-                    continue
-                
-                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
-                
-                # Download skill executable
-                skill_path = skill_dir / executable.split("/")[-1]
+
+                if not release_url:
+                    repo_url = skill_config.get("repo_url", "")
+                    folder_path = skill_config.get("folder_path", "")
+                    if repo_url and folder_path and executable:
+                        raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                        release_url = raw_base + executable
+                    else:
+                        continue
+
+                skill_path = skill_dir / (executable or "skill").split("/")[-1]
                 try:
-                    with urllib.request.urlopen(raw_base + executable) as response:
+                    with urllib.request.urlopen(release_url) as response:
                         skill_path.write_bytes(response.read())
                         skill_path.chmod(0o755)
                         print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded skill: {skill_id}")
@@ -2210,20 +2212,23 @@ class DecyphertekCLI:
                 app_dir = self.app_store_dir / app_id
                 app_dir.mkdir(exist_ok=True)
 
-                repo_url = app_config.get("repo_url", "")
-                folder_path = app_config.get("folder_path", "")
+                release_url = app_config.get("release_url", "")
                 executable = app_config.get("executable", "")
                 config = app_config.get("config", "")
                 config_path = app_config.get("config_path", "")
 
-                if not repo_url or not folder_path or not executable:
-                    continue
+                if not release_url:
+                    repo_url = app_config.get("repo_url", "")
+                    folder_path = app_config.get("folder_path", "")
+                    if repo_url and folder_path and executable:
+                        raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                        release_url = raw_base + executable
+                    else:
+                        continue
 
-                raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
-
-                app_path = app_dir / executable.split("/")[-1]
+                app_path = app_dir / (executable or "app").split("/")[-1]
                 try:
-                    with urllib.request.urlopen(raw_base + executable) as response:
+                    with urllib.request.urlopen(release_url) as response:
                         app_path.write_bytes(response.read())
                         app_path.chmod(0o755)
                         print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded app: {app_id}")
@@ -2231,15 +2236,19 @@ class DecyphertekCLI:
                     print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download {app_id}: {e}")
 
                 if config and config_path:
-                    config_dir = Path(config_path.replace("~", str(Path.home())))
-                    config_dir.mkdir(parents=True, exist_ok=True)
-                    config_file_path = config_dir / config
-                    try:
-                        with urllib.request.urlopen(raw_base + config) as response:
-                            config_file_path.write_bytes(response.read())
-                            print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
-                    except Exception:
-                        pass
+                    repo_url = app_config.get("repo_url", "")
+                    folder_path = app_config.get("folder_path", "")
+                    if repo_url and folder_path:
+                        raw_base = repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/" + folder_path
+                        config_dir = Path(config_path.replace("~", str(Path.home())))
+                        config_dir.mkdir(parents=True, exist_ok=True)
+                        config_file_path = config_dir / config
+                        try:
+                            with urllib.request.urlopen(raw_base + config) as response:
+                                config_file_path.write_bytes(response.read())
+                                print(f"{Colors.GREEN}[✓]{Colors.RESET} Downloaded config: {config}")
+                        except Exception:
+                            pass
 
         except Exception as e:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error downloading apps: {e}")
