@@ -1293,6 +1293,55 @@ class DecyphertekCLI:
             else:
                 print(f"{Colors.BLUE}[INFO]{Colors.RESET} No stored credentials")
     
+    def _prompt_model_selection(self, provider_id, ai_config):
+        """First-boot model selection prompt for a provider (writes ai-config.yaml)."""
+        try:
+            current_model = (
+                ai_config.get("providers", {}).get(provider_id, {}).get("default_model", "")
+            )
+
+            print(f"\n{Colors.CYAN}{Colors.BOLD}Select default model:{Colors.RESET}\n")
+            if current_model:
+                print(f"Current default: {Colors.GREEN}{current_model}{Colors.RESET}\n")
+            print(f"{Colors.CYAN}Popular models:{Colors.RESET}")
+            print(f"1. deepseek/deepseek-v4-flash")
+            print(f"2. qwen/qwen3.7-plus")
+            print(f"3. deepseek/deepseek-chat")
+            print(f"4. minimax/minimax-m2-regular")
+            print(f"5. ~moonshotai/kimi-latest")
+            print(f"6. deepseek/deepseek-v4-pro")
+            print(f"7. Custom model")
+            print(f"8. Keep current / skip")
+
+            print(f"\n{Colors.CYAN}Select option (1-8):{Colors.RESET}", end=" ")
+            choice = input().strip()
+
+            models = {
+                '1': 'deepseek/deepseek-v4-flash',
+                '2': 'qwen/qwen3.7-plus',
+                '3': 'deepseek/deepseek-chat',
+                '4': 'minimax/minimax-m2-regular',
+                '5': '~moonshotai/kimi-latest',
+                '6': 'deepseek/deepseek-v4-pro',
+            }
+
+            if choice in models:
+                new_model = models[choice]
+            elif choice == '7':
+                print(f"{Colors.CYAN}Enter model name:{Colors.RESET}", end=" ")
+                new_model = input().strip()
+            else:
+                print(f"{Colors.BLUE}[INFO]{Colors.RESET} Keeping current model\n")
+                return
+
+            if new_model:
+                ai_config.setdefault("providers", {}).setdefault(provider_id, {})
+                ai_config["providers"][provider_id]["default_model"] = new_model
+                self.ai_config_path.write_text(yaml.dump(ai_config, default_flow_style=False))
+                print(f"{Colors.GREEN}[✓]{Colors.RESET} Default model set to: {new_model}\n")
+        except Exception as e:
+            print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Model selection skipped: {e}")
+
     def _change_model(self):
         """Change OpenRouter model"""
         try:
@@ -1981,6 +2030,10 @@ class DecyphertekCLI:
                     if api_key:
                         self.store_credential(credential_service, api_key)
                         print(f"{Colors.GREEN}[✓]{Colors.RESET} API key stored and encrypted\n")
+
+                        # First-boot model selection for OpenRouter
+                        if provider_id == "openrouter-ai":
+                            self._prompt_model_selection(provider_id, ai_config)
                     else:
                         print(f"{Colors.BLUE}[WARNING]{Colors.RESET} No API key provided. AI features may not work.\n")
         
