@@ -18,6 +18,23 @@ from cryptography.hazmat.backends import default_backend
 import base64
 
 
+def safe_getpass(prompt="", env_var=None):
+    """getpass wrapper that falls back to env var on headless terminals."""
+    if env_var:
+        val = os.environ.get(env_var)
+        if val:
+            return val
+    try:
+        return getpass.getpass(prompt)
+    except Exception:
+        if env_var:
+            val = os.environ.get(env_var)
+            if val:
+                return val
+        print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Cannot read password in non-interactive terminal. Set {env_var or 'the appropriate env var'}.")
+        return ""
+
+
 def get_resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller"""
     try:
@@ -616,7 +633,7 @@ class DecyphertekCLI:
                     answer = self._prompt(f"Add API key for {skill_name} now? (Y/n)")
                     if answer.lower() in ("", "y", "yes"):
                         try:
-                            api_key = getpass.getpass(f"Enter API key: ").strip()
+                            api_key = safe_getpass(f"Enter API key: ").strip()
                             if api_key and self.store_credential(cred_name, api_key):
                                 print(f"{Colors.GREEN}[✓]{Colors.RESET} API key stored")
                             else:
@@ -724,21 +741,22 @@ class DecyphertekCLI:
         except Exception as e:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to execute command: {e}")
 
-    def _find_mcp_executable(self, skill_dir: Path, skill_id: str) -> Path | None:
+    def _find_mcp_executable(self, skill_dir: Path, skill_id: str, executable_path: str = "") -> Path | None:
         """Find the MCP executable in a skill directory, trying multiple patterns."""
-        # Try exact name patterns in order of preference
-        candidates = [
+        candidates = []
+        if executable_path:
+            candidates.append(skill_dir / executable_path)
+            candidates.append(skill_dir / Path(executable_path).name)
+        candidates += [
             skill_dir / f"{skill_id}.mcp",
             skill_dir / f"{skill_id.split('-')[0]}.mcp",
         ]
-        # Also glob for any .mcp file
         candidates += list(skill_dir.glob("*.mcp"))
 
         for candidate in candidates:
             if candidate.exists() and os.access(candidate, os.X_OK):
                 return candidate
 
-        # Try any executable file in the directory as a last resort
         for f in skill_dir.iterdir():
             if f.is_file() and os.access(f, os.X_OK):
                 return f
@@ -758,7 +776,15 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[INFO]{Colors.RESET}  Run /status to check installed skills.")
             return
 
-        executable = self._find_mcp_executable(skill_dir, skill_name)
+        executable_field = ""
+        if self.skills_registry_path.exists():
+            try:
+                _reg = yaml.safe_load(self.skills_registry_path.read_text())
+                executable_field = _reg.get("skills", {}).get(skill_name, {}).get("executable", "")
+            except Exception:
+                pass
+
+        executable = self._find_mcp_executable(skill_dir, skill_name, executable_field)
         if not executable:
             print(f"{Colors.BLUE}[ERROR]{Colors.RESET} No executable found in {skill_dir}")
             return
@@ -788,8 +814,7 @@ class DecyphertekCLI:
                             answer = "n"
                         if answer in ("", "y", "yes"):
                             try:
-                                import getpass as _getpass
-                                api_key = _getpass.getpass(f"Enter API key for '{credential}': ").strip()
+                                api_key = safe_getpass(f"Enter API key for '{credential}': ", env_var).strip()
                                 if api_key:
                                     if self.store_credential(credential, api_key):
                                         env[env_var] = api_key
@@ -1241,7 +1266,7 @@ class DecyphertekCLI:
         
         if choice == '1':
             print(f"{Colors.CYAN}Enter OpenRouter API key:{Colors.RESET}", end=" ")
-            api_key = getpass.getpass("")
+            api_key = safe_getpass("", "OPENROUTER_API_KEY")
             if api_key:
                 if self.store_credential("openrouter", api_key):
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} OpenRouter API key stored")
@@ -1249,7 +1274,7 @@ class DecyphertekCLI:
                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store API key")
         elif choice == '2':
             print(f"{Colors.CYAN}Enter World News API key:{Colors.RESET}", end=" ")
-            api_key = getpass.getpass("")
+            api_key = safe_getpass("", "WORLDNEWS_API_KEY")
             if api_key:
                 if self.store_credential("worldnews", api_key):
                     print(f"{Colors.GREEN}[✓]{Colors.RESET} World News API key stored")
@@ -1279,24 +1304,24 @@ class DecyphertekCLI:
             print(f"\n{Colors.CYAN}{Colors.BOLD}Change OpenRouter Model:{Colors.RESET}\n")
             print(f"Current model: {Colors.GREEN}{current_model}{Colors.RESET}\n")
             print(f"{Colors.CYAN}Popular models:{Colors.RESET}")
-            print(f"1. anthropic/claude-3.5-sonnet")
-            print(f"2. anthropic/claude-3-opus")
-            print(f"3. openai/gpt-4-turbo")
-            print(f"4. openai/gpt-4o")
-            print(f"5. meta-llama/llama-3.1-70b-instruct")
-            print(f"6. deepseek/deepseek-r1-0528:free")
+            print(f"1. deepseek/deepseek-v4-flash")
+            print(f"2. qwen/qwen3.7-plus")
+            print(f"3. deepseek/deepseek-chat")
+            print(f"4. minimax/minimax-m2-regular")
+            print(f"5. ~moonshotai/kimi-latest")
+            print(f"6. deepseek/deepseek-v4-pro")
             print(f"7. Custom model")
             
             print(f"\n{Colors.CYAN}Select option (1-7):{Colors.RESET}", end=" ")
             choice = input().strip()
             
             models = {
-                '1': 'anthropic/claude-3.5-sonnet',
-                '2': 'anthropic/claude-3-opus',
-                '3': 'openai/gpt-4-turbo',
-                '4': 'openai/gpt-4o',
-                '5': 'meta-llama/llama-3.1-70b-instruct',
-                '6': 'deepseek/deepseek-r1-0528:free',
+                '1': 'deepseek/deepseek-v4-flash',
+                '2': 'qwen/qwen3.7-plus',
+                '3': 'deepseek/deepseek-chat',
+                '4': 'minimax/minimax-m2-regular',
+                '5': '~moonshotai/kimi-latest',
+                '6': 'deepseek/deepseek-v4-pro',
             }
             
             if choice in models:
@@ -1847,20 +1872,26 @@ class DecyphertekCLI:
         self.download_configs()
         
         # Set password
-        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Set a master password to protect the application:")
-        while True:
-            password = getpass.getpass("Enter password: ")
-            confirm = getpass.getpass("Confirm password: ")
-            if password == confirm and len(password) >= 8:
-                password_hash = hashlib.sha256(password.encode()).hexdigest()
-                self.password_file.write_text(password_hash)
-                self.password_file.chmod(0o600)
-                print(f"{Colors.GREEN}[✓]{Colors.RESET} Password set successfully")
-                break
-            elif len(password) < 8:
-                print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Password must be at least 8 characters")
-            else:
-                print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Passwords don't match. Try again.")
+        env_password = os.environ.get("MASTER_PASSWORD", "")
+        if env_password and len(env_password) >= 8:
+            password = env_password
+            print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Using master password from $MASTER_PASSWORD")
+        else:
+            print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Set a master password to protect the application:")
+            while True:
+                password = safe_getpass("Enter password: ", "MASTER_PASSWORD")
+                confirm = safe_getpass("Confirm password: ", "MASTER_PASSWORD")
+                if password == confirm and len(password) >= 8:
+                    break
+                elif len(password) < 8:
+                    print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Password must be at least 8 characters")
+                else:
+                    print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Passwords don't match. Try again.")
+
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        self.password_file.write_text(password_hash)
+        self.password_file.chmod(0o600)
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Password set successfully")
         
         # Generate encryption salt for Fernet key derivation
         print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating encryption salt...")
@@ -1871,6 +1902,18 @@ class DecyphertekCLI:
             self.salt_path.chmod(0o600)
             print(f"{Colors.GREEN}[✓]{Colors.RESET} Encryption salt: {self.salt_path}")
             print()
+        # Generate SSH keypair for credential encryption
+        ssh_key_path = self.keys_dir / "id_ed25519"
+        if not ssh_key_path.exists():
+            print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Generating SSH keypair...")
+            subprocess.run(
+                ["ssh-keygen", "-t", "ed25519", "-f", str(ssh_key_path), "-N", "", "-q"],
+                check=True,
+            )
+            ssh_key_path.chmod(0o600)
+            (self.keys_dir / "id_ed25519.pub").chmod(0o644)
+            print(f"{Colors.GREEN}[✓]{Colors.RESET} SSH keypair: {ssh_key_path}")
+
         # Derive Fernet key from password so credentials can be stored immediately
         self._fernet = self._derive_fernet(password)
         
@@ -1896,7 +1939,7 @@ class DecyphertekCLI:
         print(f"\n{Colors.CYAN}{Colors.BOLD}=== DECYPHERTEK.AI LOGIN ==={Colors.RESET}\n")
         
         for attempt in range(3):
-            password = getpass.getpass(f"{Colors.BLUE}[LOGIN]{Colors.RESET} Enter password: ")
+            password = safe_getpass(f"{Colors.BLUE}[LOGIN]{Colors.RESET} Enter password: ", "MASTER_PASSWORD")
             password_hash = hashlib.sha256(password.encode()).hexdigest()
             
             if password_hash == stored_hash:
@@ -1933,7 +1976,8 @@ class DecyphertekCLI:
                     print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} {provider_config.get('name', provider_id)} is enabled but no API key found.")
                     print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Please enter your API key to continue.\n")
                     
-                    api_key = getpass.getpass(f"Enter {provider_config.get('name', provider_id)} API key: ").strip()
+                    env_key = f"{credential_service.upper()}_API_KEY"
+                    api_key = safe_getpass(f"Enter {provider_config.get('name', provider_id)} API key: ", env_key).strip()
                     
                     if api_key:
                         self.store_credential(credential_service, api_key)
