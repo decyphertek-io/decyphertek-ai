@@ -3,16 +3,19 @@
 **WIKI_ROOT (source):** `~/Documents/git/decyphertek-ai/wiki/`
 **Runtime root:**       `~/.decyphertek.ai/`
 
-> Read this map FIRST. Pick ONE targeted file. Do not glob `/**/*`. Do not walk the filesystem for paths already listed below.
+> READ THIS MAP FIRST. The runtime enforces it: discovery tools are blocked
+> until you call `wiki_search(keyword)`. Do not glob `~/**`. Do not walk paths
+> already listed below.
 
 ---
 
-## Read Order (every task, no exceptions)
+## Read order (every task, no exceptions)
 
-1. `soul.md`       — identity + rules (read once at startup)
-2. `directory.md`  — this file (the map)
-3. ONE file from `projects/`, `memory/`, or `research/` matching the task keyword
-4. Filesystem / codebase search = LAST resort
+1. `soul.md`           — identity + behavior (auto-injected each turn)
+2. `directory.md`      — this map (auto-injected each turn)
+3. `wiki_search(keyword)` — single tool call to grep the wiki for the topic
+4. ONE `read_file` of the most relevant projects/, memory/, or research/ entry
+5. Filesystem search — LAST resort, requires an explicit user-given path
 
 ---
 
@@ -66,7 +69,7 @@ decyphertek-ai/
 └── README.md
 ```
 
-## Related repos (`~/Documents/git/`)
+## Related source repos (`~/Documents/git/`)
 
 ```
 agent-store/                 ← source for the .agent binaries (adminotaur, agent-builder, mcp-builder)
@@ -76,33 +79,54 @@ app-store/                   ← source for supporting apps (chromadb, etc.)
 
 ---
 
-## Folder Purpose (where notes go)
+## Agent tools (priority order)
+
+| Order | Tool             | Purpose                                                            |
+|-------|------------------|--------------------------------------------------------------------|
+| 1     | `wiki_search`    | Grep this wiki (directory.md + projects/ + memory/ + research/)   |
+| 2     | `read_file`      | Read ONE specific file                                             |
+| 3     | `write_file`     | Persist notes / edit files within `~/`                             |
+| 4     | `remember_path`  | Append a newly-found external path to this directory.md            |
+| 5     | `list_directory` | Only for paths NOT in this map; gated by wiki-first policy         |
+| 6     | `execute_shell`  | Narrow ops only; broad `find`/`locate`/`ls ~`/`grep -r ~` BLOCKED  |
+
+---
+
+## Folder purpose (where notes go)
 
 | Folder        | What goes there                                                     |
 |---------------|---------------------------------------------------------------------|
-| `memory/`     | Per-session conversation summaries — bullet points, decisions, outcomes. Filename: `YYYY-MM-DD-topic.md` |
+| `memory/`     | Per-session conversation summaries — bullets, decisions, outcomes. Filename: `YYYY-MM-DD-topic.md` |
 | `projects/`   | Technical reference — commands, bug fixes, config snippets, architecture notes. Filename: `<topic>.md` |
 | `research/`   | Broader findings, external links, brainstorming. Filename: `<topic>.md` |
 
 ---
 
-## Search Discipline (token-saving)
+## Search discipline (enforced at runtime)
 
-- ✅ Read `soul.md` + `directory.md` once per session
-- ✅ Read ONE file from one folder that matches the topic keyword
-- ✅ Skip `memory/` entirely if no filename matches the keyword
-- ✅ Skip memory files older than ~3 days unless explicitly relevant
+- ✅ `wiki_search(keyword)` is the FIRST tool call for any discovery question
+- ✅ ONE follow-up `read_file` if you need more depth — never more
+- ✅ Skip `memory/` files older than ~3 days unless the keyword matches
 - ❌ Never glob `wiki/**/*.md`
-- ❌ Never read multiple memory files "just in case"
-- ❌ Never run `list_directory` on paths listed in this map — answer from the map
-- ❌ Never read empty/placeholder README files repeatedly
+- ❌ Never `list_directory` on paths listed above — quote the map
+- ❌ Never run `find ~` / `locate` / `ls ~` / `grep -r ~` — the runtime BLOCKS these
+- ❌ Never re-read soul.md or directory.md — they are auto-injected each turn
 
 ---
 
-## Self-Update Rules
+## Self-update rules
 
-After each task, ask:
-1. Learned a new command / fix / config? → write `projects/<topic>.md`
-2. Decision or session summary worth keeping? → write `memory/YYYY-MM-DD-topic.md`
-3. External finding / link? → write `research/<topic>.md`
-4. Created a new folder? → update this file
+After each task, ask yourself:
+1. Learned a new command / fix / config? → `write_file` to `projects/<topic>.md`
+2. Decision or session summary worth keeping? → `write_file` to `memory/YYYY-MM-DD-topic.md`
+3. External finding / link? → `write_file` to `research/<topic>.md`
+4. Found a new external path the wiki didn't know? → `remember_path(path, note)`
+5. Created a new wiki folder? → update this file
+
+---
+
+## Learned paths
+
+_Auto-appended by `remember_path` when `wiki_search` misses and the user
+points the agent at a new location. Future sessions should find these via
+`wiki_search` without filesystem walks._
