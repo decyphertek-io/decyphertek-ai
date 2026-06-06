@@ -38,11 +38,13 @@ jobs:
           set -e
           uv venv --clear --python 3.12
           source .venv/bin/activate
-          uv pip install pyinstaller cryptography pyyaml
+          uv pip install pyinstaller cryptography pyyaml ansible-vault
           rm -rf dist build *.spec
           pyinstaller --onefile \
             --name decyphertek.ai \
             --clean \
+            --hidden-import ansible_vault \
+            --collect-all ansible_vault \
             cli-ai.py
           rm -rf .venv build
           find . -maxdepth 1 -name "*.spec" -delete

@@ -2020,9 +2020,10 @@ class DecyphertekCLI:
             if self._vault is None:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Not authenticated — cannot encrypt credential")
                 return False
-            encrypted = self._vault.dump_raw(credential)
+            # ansible_vault.Vault.dump() returns the encrypted vault-formatted string
+            encrypted = self._vault.dump(credential)
             cred_file = self.creds_dir / f"{service}.vault"
-            cred_file.write_bytes(encrypted if isinstance(encrypted, bytes) else encrypted.encode())
+            cred_file.write_text(encrypted if isinstance(encrypted, str) else encrypted.decode())
             cred_file.chmod(0o600)
             return True
         except Exception as e:
@@ -2339,8 +2340,9 @@ class DecyphertekCLI:
         cred_file = self.creds_dir / f"{credential_name}.vault"
         if not cred_file.exists():
             raise Exception(f"Credential file not found: {cred_file}")
-        encrypted_bytes = cred_file.read_bytes()
-        decrypted = self._vault.load_raw(encrypted_bytes)
+        # ansible_vault.Vault.load() takes the vault-formatted string and returns the original data
+        encrypted_text = cred_file.read_text()
+        decrypted = self._vault.load(encrypted_text)
         if isinstance(decrypted, bytes):
             decrypted = decrypted.decode()
         return decrypted
