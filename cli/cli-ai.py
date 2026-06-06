@@ -18,7 +18,7 @@ urllib.request.urlopen = lambda url, *a, **kw: _original_urlopen(url, *a, contex
 import readline
 import glob
 from pathlib import Path
-from ansible.parsing.vault import VaultLib, VaultSecret
+from ansible_vault import Vault
 
 
 def safe_getpass(prompt="", env_var=None):
@@ -73,7 +73,7 @@ class DecyphertekCLI:
         self.keys_dir = self.app_dir / "keys"
         self.vault_pass_file = self.keys_dir / ".vault_pass"
         self.password_file = self.app_dir / ".password_hash"
-        self._vault: VaultLib = None  # set after authenticate()
+        self._vault: Vault = None  # set after authenticate()
         
         # Local version manifest — tracks installed component versions
         self.versions_path = self.app_dir / "versions.yaml"
@@ -1945,8 +1945,8 @@ class DecyphertekCLI:
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Vault password file: {self.vault_pass_file}")
         print()
 
-        # Build VaultLib so credentials can be stored immediately
-        self._vault = VaultLib([(b"default", VaultSecret(password.encode()))])
+        # Build Vault so credentials can be stored immediately
+        self._vault = Vault(password)
         
         # Download all enabled agents, skills, and apps (only on first run)
         self.download_all_stores()
@@ -1961,7 +1961,7 @@ class DecyphertekCLI:
             password_hash = hashlib.sha256(password.encode()).hexdigest()
             
             if password_hash == stored_hash:
-                self._vault = VaultLib([(b"default", VaultSecret(password.encode()))])
+                self._vault = Vault(password)
                 # Keep vault_pass file in sync so external `ansible-vault` calls work
                 self.keys_dir.mkdir(parents=True, exist_ok=True)
                 self.vault_pass_file.write_text(password)
@@ -2020,9 +2020,9 @@ class DecyphertekCLI:
             if self._vault is None:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Not authenticated — cannot encrypt credential")
                 return False
-            encrypted = self._vault.encrypt(credential.encode())
+            encrypted = self._vault.dump_raw(credential)
             cred_file = self.creds_dir / f"{service}.vault"
-            cred_file.write_bytes(encrypted)
+            cred_file.write_bytes(encrypted if isinstance(encrypted, bytes) else encrypted.encode())
             cred_file.chmod(0o600)
             return True
         except Exception as e:
@@ -2340,7 +2340,10 @@ class DecyphertekCLI:
         if not cred_file.exists():
             raise Exception(f"Credential file not found: {cred_file}")
         encrypted_bytes = cred_file.read_bytes()
-        return self._vault.decrypt(encrypted_bytes).decode()
+        decrypted = self._vault.load_raw(encrypted_bytes)
+        if isinstance(decrypted, bytes):
+            decrypted = decrypted.decode()
+        return decrypted
 
 
 def main():
