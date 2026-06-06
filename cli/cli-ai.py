@@ -18,11 +18,7 @@ urllib.request.urlopen = lambda url, *a, **kw: _original_urlopen(url, *a, contex
 import readline
 import glob
 from pathlib import Path
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-import base64
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 
 def safe_getpass(prompt="", env_var=None):
@@ -75,9 +71,9 @@ class DecyphertekCLI:
         self.mcp_store_dir = self.app_dir / "mcp-store"
         self.app_store_dir = self.app_dir / "app-store"
         self.keys_dir = self.app_dir / "keys"
-        self.salt_path = self.keys_dir / "salt.bin"
+        self.vault_pass_file = self.keys_dir / ".vault_pass"
         self.password_file = self.app_dir / ".password_hash"
-        self._fernet: Fernet = None  # set after authenticate()
+        self._vault: VaultLib = None  # set after authenticate()
         
         # Local version manifest — tracks installed component versions
         self.versions_path = self.app_dir / "versions.yaml"
@@ -363,7 +359,7 @@ class DecyphertekCLI:
         env["DECYPHERTEK_MCP_STORE"]      = str(self.mcp_store_dir)
         env["DECYPHERTEK_AGENT_STORE"]    = str(self.agent_store_dir)
         try:
-            openrouter_cred = self.creds_dir / "openrouter.enc"
+            openrouter_cred = self.creds_dir / "openrouter.vault"
             if openrouter_cred.exists():
                 key = self.decrypt_credential("openrouter")
                 if key:
@@ -635,7 +631,7 @@ class DecyphertekCLI:
 
             # ── Prompt for API key if needed ──────────────────────────────
             if cred_name:
-                cred_file = self.creds_dir / f"{cred_name}.enc"
+                cred_file = self.creds_dir / f"{cred_name}.vault"
                 if not cred_file.exists():
                     answer = self._prompt(f"Add API key for {skill_name} now? (Y/n)")
                     if answer.lower() in ("", "y", "yes"):
@@ -808,7 +804,7 @@ class DecyphertekCLI:
                 env_var = skill_info.get("env_mapping")
 
                 if credential and env_var:
-                    cred_file = self.creds_dir / f"{credential}.enc"
+                    cred_file = self.creds_dir / f"{credential}.vault"
                     if cred_file.exists():
                         decrypted_key = self.decrypt_credential(credential)
                         if decrypted_key:
@@ -839,7 +835,7 @@ class DecyphertekCLI:
 
         # Also inject the OpenRouter API key so the skill can call the AI provider
         try:
-            openrouter_cred = self.creds_dir / "openrouter.enc"
+            openrouter_cred = self.creds_dir / "openrouter.vault"
             if openrouter_cred.exists():
                 openrouter_key = self.decrypt_credential("openrouter")
                 if openrouter_key:
@@ -919,7 +915,7 @@ class DecyphertekCLI:
                 env_var = skill_info.get("env_mapping")
                 
                 if credential:
-                    cred_file = self.creds_dir / f"{credential}.enc"
+                    cred_file = self.creds_dir / f"{credential}.vault"
                     if cred_file.exists():
                         decrypted_key = self.decrypt_credential(credential)
                         if decrypted_key and env_var:
@@ -971,7 +967,7 @@ class DecyphertekCLI:
                 env_var = agent_info.get("env_mapping")
                 
                 if credential:
-                    cred_file = self.creds_dir / f"{credential}.enc"
+                    cred_file = self.creds_dir / f"{credential}.vault"
                     if cred_file.exists():
                         decrypted_key = self.decrypt_credential(credential)
                         if decrypted_key and env_var:
@@ -979,7 +975,7 @@ class DecyphertekCLI:
 
             # Always inject OpenRouter key and model for /chat usage
             try:
-                openrouter_cred = self.creds_dir / "openrouter.enc"
+                openrouter_cred = self.creds_dir / "openrouter.vault"
                 if openrouter_cred.exists():
                     openrouter_key = self.decrypt_credential("openrouter")
                     if openrouter_key:
@@ -1284,7 +1280,7 @@ class DecyphertekCLI:
                 else:
                     print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Failed to store API key")
         elif choice == '3':
-            cred_files = list(self.creds_dir.glob("*.enc"))
+            cred_files = list(self.creds_dir.glob("*.vault"))
             if cred_files:
                 print(f"\n{Colors.CYAN}Stored credentials:{Colors.RESET}")
                 for cred_file in cred_files:
@@ -1782,7 +1778,7 @@ class DecyphertekCLI:
         # Test OpenRouter API key decryption
         print(f"\n{Colors.CYAN}Testing OpenRouter Credentials:{Colors.RESET}")
         try:
-            cred_file = self.creds_dir / "openrouter.enc"
+            cred_file = self.creds_dir / "openrouter.vault"
             if cred_file.exists():
                 decrypted_key = self.decrypt_credential("openrouter")
                 if decrypted_key and len(decrypted_key) > 0:
@@ -1837,7 +1833,7 @@ class DecyphertekCLI:
         
         # Check for encrypted credentials
         if self.creds_dir.exists():
-            creds = list(self.creds_dir.glob("*.enc"))
+            creds = list(self.creds_dir.glob("*.vault"))
             print(f"{Colors.GREEN}[✓]{Colors.RESET} Stored credentials: {len(creds)}")
             for cred in creds:
                 print(f"  - {cred.stem}")
@@ -1941,46 +1937,20 @@ class DecyphertekCLI:
         self.password_file.chmod(0o600)
         print(f"{Colors.GREEN}[✓]{Colors.RESET} Password set successfully")
         
-        # Generate encryption salt for Fernet key derivation
-        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Generating encryption salt...")
-        if not self.salt_path.exists():
-            self.keys_dir.mkdir(parents=True, exist_ok=True)
-            salt = os.urandom(16)
-            self.salt_path.write_bytes(salt)
-            self.salt_path.chmod(0o600)
-            print(f"{Colors.GREEN}[✓]{Colors.RESET} Encryption salt: {self.salt_path}")
-            print()
-        # Generate SSH keypair for credential encryption
-        ssh_key_path = self.keys_dir / "id_ed25519"
-        if not ssh_key_path.exists():
-            print(f"{Colors.BLUE}[SETUP]{Colors.RESET} Generating SSH keypair...")
-            subprocess.run(
-                ["ssh-keygen", "-t", "ed25519", "-f", str(ssh_key_path), "-N", "", "-q"],
-                check=True,
-            )
-            ssh_key_path.chmod(0o600)
-            (self.keys_dir / "id_ed25519.pub").chmod(0o644)
-            print(f"{Colors.GREEN}[✓]{Colors.RESET} SSH keypair: {ssh_key_path}")
+        # Initialize Ansible Vault for credential encryption
+        print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} Initializing Ansible Vault...")
+        self.keys_dir.mkdir(parents=True, exist_ok=True)
+        self.vault_pass_file.write_text(password)
+        self.vault_pass_file.chmod(0o600)
+        print(f"{Colors.GREEN}[✓]{Colors.RESET} Vault password file: {self.vault_pass_file}")
+        print()
 
-        # Derive Fernet key from password so credentials can be stored immediately
-        self._fernet = self._derive_fernet(password)
+        # Build VaultLib so credentials can be stored immediately
+        self._vault = VaultLib([(b"default", VaultSecret(password.encode()))])
         
         # Download all enabled agents, skills, and apps (only on first run)
         self.download_all_stores()
     
-    def _derive_fernet(self, password: str) -> Fernet:
-        """Derive a Fernet key from the master password + stored salt"""
-        salt = self.salt_path.read_bytes()
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=480000,
-            backend=default_backend()
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        return Fernet(key)
-
     def authenticate(self):
         """Authenticate user with password and derive encryption key"""
         stored_hash = self.password_file.read_text().strip()
@@ -1991,7 +1961,11 @@ class DecyphertekCLI:
             password_hash = hashlib.sha256(password.encode()).hexdigest()
             
             if password_hash == stored_hash:
-                self._fernet = self._derive_fernet(password)
+                self._vault = VaultLib([(b"default", VaultSecret(password.encode()))])
+                # Keep vault_pass file in sync so external `ansible-vault` calls work
+                self.keys_dir.mkdir(parents=True, exist_ok=True)
+                self.vault_pass_file.write_text(password)
+                self.vault_pass_file.chmod(0o600)
                 print(f"{Colors.GREEN}[✓]{Colors.RESET} Authentication successful\n")
                 return True
             else:
@@ -2018,7 +1992,7 @@ class DecyphertekCLI:
                 if not credential_service:
                     continue
                 
-                cred_file = self.creds_dir / f"{credential_service}.enc"
+                cred_file = self.creds_dir / f"{credential_service}.vault"
                 
                 if not cred_file.exists():
                     print(f"\n{Colors.BLUE}[SETUP]{Colors.RESET} {provider_config.get('name', provider_id)} is enabled but no API key found.")
@@ -2041,13 +2015,13 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Error checking credentials: {e}")
     
     def store_credential(self, service: str, credential: str):
-        """Encrypt and store a credential using Fernet (AES-128)"""
+        """Encrypt and store a credential using Ansible Vault (AES-256)."""
         try:
-            if self._fernet is None:
+            if self._vault is None:
                 print(f"{Colors.BLUE}[ERROR]{Colors.RESET} Not authenticated — cannot encrypt credential")
                 return False
-            encrypted = self._fernet.encrypt(credential.encode())
-            cred_file = self.creds_dir / f"{service}.enc"
+            encrypted = self._vault.encrypt(credential.encode())
+            cred_file = self.creds_dir / f"{service}.vault"
             cred_file.write_bytes(encrypted)
             cred_file.chmod(0o600)
             return True
@@ -2359,14 +2333,14 @@ class DecyphertekCLI:
             print(f"{Colors.BLUE}[WARNING]{Colors.RESET} Failed to download Adminotaur: {e}")
     
     def decrypt_credential(self, credential_name):
-        """Decrypt credential using Fernet (AES-128)"""
-        if self._fernet is None:
+        """Decrypt credential using Ansible Vault (AES-256)."""
+        if self._vault is None:
             raise Exception("Not authenticated — cannot decrypt credential")
-        cred_file = self.creds_dir / f"{credential_name}.enc"
+        cred_file = self.creds_dir / f"{credential_name}.vault"
         if not cred_file.exists():
             raise Exception(f"Credential file not found: {cred_file}")
         encrypted_bytes = cred_file.read_bytes()
-        return self._fernet.decrypt(encrypted_bytes).decode()
+        return self._vault.decrypt(encrypted_bytes).decode()
 
 
 def main():
