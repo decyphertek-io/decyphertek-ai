@@ -47,52 +47,46 @@ Removes `~/.decyphertek.ai/`
 
 ## Architecture
 
+> In progress restructure. See [`wiki/decyphertek-ai-architecture.md`](wiki/decyphertek-ai-architecture.md) for the full plan.
+
+The three external stores (agent-store, mcp-store, app-store) are being removed. Everything is bundled into a single install that ships both a CLI and an optional Flet GUI. ChromaDB is replaced by sqlite-vec + LlamaIndex for RAG.
+
 ```
 User
   ↓
-CLI (cli-ai.py)
+Single install (decyphertek.ai) — ships CLI + Flet GUI together
   ↓ Password protection
   ↓ Credential encryption/decryption
   ↓
-  ├─> agent-store (GitHub) → Downloads Adminotaur + workers
-  ├─> mcp-store (GitHub) → Downloads MCP skills
-  └─> app-store (GitHub) → Downloads apps (ChromaDB, etc.)
+  ├─> CLI entrypoint (terminal)
+  └─> Flet GUI entrypoint (desktop)
   ↓
-Adminotaur Agent (LangGraph supervisor)
+Core Agent (LangGraph supervisor)
   ↓ Routes queries and slash commands
-  ↓ Coordinates worker agents
   ↓
-MCP Gateway
-  ↓ Manages MCP skills
-  ↓ Retrieves encrypted credentials
-  ↓
-MCP Skills (web-search, rag-chat, etc.)
+Built-in tools (bundled, no external stores):
+  ├─> Web browsing
+  ├─> MCP compatibility layer → Docker / Podman MCP servers
+  └─> RAG chat → LlamaIndex → sqlite-vec vector store
   ↓
 AI Provider (OpenRouter, etc.)
 ```
 
 **Flow:**
-- CLI downloads agents from agent-store, skills from mcp-store, apps from app-store
-- Adminotaur routes user input to workers or MCP skills
-- MCP Gateway manages skills and retrieves encrypted credentials
-- Skills call AI providers with decrypted credentials
-
-**Research**
-- https://agentskills.io ( Not implemented )
+- Single install ships CLI and GUI; user picks CLI, GUI, or both at run time.
+- Core agent routes input to bundled tools (web browsing, MCP layer, RAG chat).
+- MCP compatibility layer interfaces with Docker / Podman MCP servers using encrypted credentials.
+- RAG chat uses LlamaIndex for ingestion and sqlite-vec as the local vector store.
 
 ## References
-
-### Repositories
-- **[agent-store](https://github.com/decyphertek-io/agent-store)** - LangChain agents (Adminotaur + workers)
-- **[mcp-store](https://github.com/decyphertek-io/mcp-store)** - MCP skills (web-search, rag-chat, etc.)
-- **[app-store](https://github.com/decyphertek-io/app-store)** - Standalone apps (ChromaDB, etc.)
 
 ### Tech Stack
 - **[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview)** - Agent orchestration framework
 - **[LangChain](https://python.langchain.com/)** - Agent framework and tool integrations
-- **[Agent Skills SDK](https://agentskills.io)** - Skill/tool management for LangChain agents
-- **[FastMCP](https://github.com/jlowin/fastmcp)** - MCP server implementation
-- **[ChromaDB](https://www.trychroma.com/)** - Vector database for RAG
+- **[FastMCP](https://github.com/jlowin/fastmcp)** - MCP compatibility layer
+- **[sqlite-vec](https://github.com/asg017/sqlite-vec)** - Vector database for RAG (replaces ChromaDB)
+- **[LlamaIndex](https://www.llamaindex.ai/)** - RAG ingestion / indexing
+- **[Flet](https://flet.dev/)** - Optional cross-platform GUI layer
 - **[uv](https://docs.astral.sh/uv/)** - Python package and project manager
 - **[PyInstaller](https://pyinstaller.org/)** - Python executable packager
 
